@@ -1,10 +1,30 @@
 # 🐕 ShibaCuddles — Advanced Network Scanner & Security Testing Suite
 
+[![CI](https://github.com/TheRealJesusTheHacker/ShibaCuddles/actions/workflows/ci.yml/badge.svg)](https://github.com/TheRealJesusTheHacker/ShibaCuddles/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/TheRealJesusTheHacker/ShibaCuddles)](https://github.com/TheRealJesusTheHacker/ShibaCuddles/releases)
+
 A fast, multi-threaded network scanner with a PyQt6 GUI dashboard — device discovery, port scanning,
 service fingerprinting, OS detection, and vulnerability checks, plus WiFi security-testing modules
 for authorized assessments.
 
 > **Because every network needs a cuddly scanner.**
+
+## ⬇️ Downloads
+
+No Python needed — grab the latest standalone build from the
+[releases page](https://github.com/TheRealJesusTheHacker/ShibaCuddles/releases):
+
+| Platform | File |
+|---|---|
+| Windows | [ShibaCuddles.exe](https://github.com/TheRealJesusTheHacker/ShibaCuddles/releases/download/v0.2.0/ShibaCuddles.exe) |
+| Linux | [ShibaCuddles](https://github.com/TheRealJesusTheHacker/ShibaCuddles/releases/download/v0.2.0/ShibaCuddles) |
+
+SHA256 checksums ship alongside each release — verify before running:
+
+```bash
+sha256sum -c SHA256SUMS-windows.txt   # Windows (Git Bash / WSL)
+sha256sum -c SHA256SUMS-linux.txt     # Linux
+```
 
 ## 🚀 Quick Start
 
@@ -42,7 +62,7 @@ python gui_launcher.py
 Requires **Python 3.8+**.
 
 ```bash
-git clone https://github.com/thedarkonejesus/ShibaCuddles.git
+git clone https://github.com/TheRealJesusTheHacker/ShibaCuddles.git
 cd ShibaCuddles
 pip install -r requirements.txt
 ```
@@ -246,4 +266,4 @@ proper authorization before using this tool on any network or system.
 
 Built for security professionals and network administrators to perform efficient, comprehensive
 network assessments. For more information, visit:
-https://github.com/thedarkonejesus/ShibaCuddles
+https://github.com/TheRealJesusTheHacker/ShibaCuddles
