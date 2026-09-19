@@ -48,10 +48,12 @@ python gui_launcher.py
   vulnerability detection, real-time statistics
 
 ### GUI Dashboard
-- Real-time scan progress and live results table
-- IP, status, ports, services, and OS at a glance
-- Statistics visualization and live logging
-- Multi-format export
+- Sleek dark-themed dashboard with a brand header and version badge
+- Grouped sidebar: target, performance, scan options, and actions
+- Live results table with alive/down status indicators and monospace IPs
+- Card-based statistics (hosts scanned, hosts alive, open ports, averages)
+- Color-coded console-style activity log
+- Real-time scan progress and multi-format export
 
 ### WiFi Security Testing
 - Device deauthentication (requires the `aircrack-ng` suite)

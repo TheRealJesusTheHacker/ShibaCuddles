@@ -16,7 +16,7 @@ from .utils import (
     print_banner
 )
 
-__version__ = "0.2.0"
+__version__ = "0.3.0"
 __author__ = "thedarkonejesus"
 __description__ = "ShibaCuddles - Advanced Network Scanner"
 
