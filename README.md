@@ -1,202 +1,104 @@
-# ShibaCuddles - Advanced Network Scanner & Security Testing Suite
+# 🐕 ShibaCuddles — Advanced Network Scanner & Security Testing Suite
 
-## 🎯 Quick Start
+A fast, multi-threaded network scanner with a PyQt6 GUI dashboard — device discovery, port scanning,
+service fingerprinting, OS detection, and vulnerability checks, plus WiFi security-testing modules
+for authorized assessments.
 
-### CLI Mode
+> **Because every network needs a cuddly scanner.**
+
+## 🚀 Quick Start
+
 ```bash
-# Basic scan
+# Install runtime dependencies
+pip install -r requirements.txt
+
+# Scan your network (CLI)
 python main.py 192.168.1.0/24
 
-# Aggressive scan with service detection
-python main.py 192.168.1.0/24 --aggressive -vv
-
-# Export results
-python main.py 192.168.1.0/24 --output results.json --format json
-```
-
-### GUI Mode
-```bash
+# ...or launch the GUI dashboard
 python gui_launcher.py
 ```
 
+## ✨ Features
+
+### Network Scanning
+- **Device Discovery** — ICMP ping sweep, ARP scanning, hostname resolution, MAC detection
+- **Port Scanning** — TCP (1–65535), UDP detection, banner grabbing, service version detection
+- **Advanced Analysis** — service fingerprinting (20+ services), TTL-based OS fingerprinting,
+  vulnerability detection, real-time statistics
+
+### GUI Dashboard
+- Real-time scan progress and live results table
+- IP, status, ports, services, and OS at a glance
+- Statistics visualization and live logging
+- Multi-format export
+
+### WiFi Security Testing
+- Device deauthentication (requires the `aircrack-ng` suite)
+- Broadcast deauth, monitor-mode control, network scanning, channel analysis
+
 ## 📦 Installation
 
-### Prerequisites
-- Python 3.8+
-- pip
-- For WiFi features: aircrack-ng suite
+Requires **Python 3.8+**.
 
-### Setup
 ```bash
-# Clone repository
 git clone https://github.com/thedarkonejesus/ShibaCuddles.git
 cd ShibaCuddles
-
-# Install dependencies
 pip install -r requirements.txt
+```
 
-# Install WiFi tools (Linux)
-sudo apt-get install aircrack-ng  # Ubuntu/Debian
+For WiFi features, install the aircrack-ng suite separately:
+
+```bash
+sudo apt-get install aircrack-ng   # Ubuntu/Debian
 sudo dnf install aircrack-ng       # Fedora
 brew install aircrack-ng           # macOS
 ```
 
-## 🚀 Features
+## 🖥️ CLI Usage
 
-### Network Scanning
-✅ **Device Discovery**
-- ICMP ping sweep
-- ARP scanning
-- Hostname resolution
-- MAC address detection
-
-✅ **Port Scanning**
-- TCP port scanning (1-65535)
-- UDP port detection
-- Banner grabbing
-- Service version detection
-
-✅ **Advanced Analysis**
-- Service fingerprinting (20+ services)
-- OS fingerprinting (TTL-based)
-- Vulnerability detection
-- Real-time statistics
-
-### GUI Interface
-✅ **User-Friendly Dashboard**
-- Real-time scan progress
-- Live results table
-- Statistics visualization
-- Comprehensive logging
-- Multi-format export
-
-### WiFi Security Testing
-⚠️ **Deauthentication (Requires aircrack-ng)**
-- Device deauthentication
-- Broadcast deauth attacks
-- Monitor mode control
-- Network scanning
-- Channel jamming analysis
-
-⚠️ **Advanced Features**
-- Rogue AP creation
-- Traffic analysis
-- Network interruption testing
-
-## 📊 CLI Usage
-
-### Basic Commands
 ```bash
-# Default scan (ports 1-1024)
+# Basic scan (ports 1-1024)
 python main.py 192.168.1.0/24
 
-# Specific ports
+# Specific ports / port range
 python main.py 192.168.1.0/24 --ports 22,80,443
 python main.py 192.168.1.0/24 --ports 1-5000
 
-# With threading
-python main.py 192.168.1.0/24 --threads 20
+# Aggressive scan with service + OS detection
+python main.py 192.168.1.0/24 --aggressive --service-detection --os-detection
 
-# With services and OS detection
-python main.py 192.168.1.0/24 --service-detection --os-detection
-
-# Aggressive scan (all features)
-python main.py 192.168.1.0/24 --aggressive
+# More threads, custom timeout
+python main.py 192.168.1.0/24 --threads 20 --timeout 10
 
 # Verbose output
 python main.py 192.168.1.0/24 -vv
-
-# Custom timeout
-python main.py 192.168.1.0/24 --timeout 10
 ```
 
-### Output Options
+### Exporting results
+
 ```bash
-# JSON export (default)
-python main.py 192.168.1.0/24 --output results.json
-
-# CSV export
-python main.py 192.168.1.0/24 --output results.csv --format csv
-
-# XML export
-python main.py 192.168.1.0/24 --output results.xml --format xml
-
-# Text export
-python main.py 192.168.1.0/24 --output results.txt --format txt
+python main.py 192.168.1.0/24 --output results.json            # JSON (default)
+python main.py 192.168.1.0/24 --output results.csv --format csv # CSV
+python main.py 192.168.1.0/24 --output results.xml --format xml # XML
+python main.py 192.168.1.0/24 --output results.txt --format txt # plain text
 ```
 
-## 🖥️ GUI Features
+### Example scans
 
-### Scan Configuration
-- Network target (CIDR notation)
-- Custom port ranges
-- Thread count (1-64)
-- Connection timeout
-- Toggle ping sweep
-- Toggle service detection
-- Toggle OS fingerprinting
-- Aggressive mode
-
-### Results Viewing
-- Real-time results table
-- IP address, status, ports, services, OS
-- Statistics dashboard
-- Live logging output
-- Export to multiple formats
-
-## ⚠️ WiFi Deauthentication (Advanced)
-
-### Legal Warning
-**Unauthorized wireless network interference is illegal in most jurisdictions.**
-
-Only use this feature for:
-- Testing your own networks
-- Authorized penetration testing
-- Educational purposes
-
-### Usage
-```python
-from src.deauth import WiFiDeauthenticator
-
-deauth = WiFiDeauthenticator()
-
-# Enable monitor mode
-deauth.enable_monitor_mode('wlan0')
-
-# Deauth specific device
-target = DeauthTarget(
-    mac_address='AA:BB:CC:DD:EE:FF',
-    gateway_mac='11:22:33:44:55:66',
-    ssid='TestNetwork',
-    channel=6,
-    interface='wlan0mon'
-)
-deauth.deauthenticate_device(target)
-
-# Disable monitor mode
-deauth.disable_monitor_mode('wlan0mon')
-```
-
-## 🔍 Example Scans
-
-### Small Office Network
 ```bash
+# Small office network
 python main.py 10.0.0.0/24 --threads 15 --ports 22,80,443,3306,5432
-```
 
-### Home Network Security Audit
-```bash
+# Home network security audit
 python main.py 192.168.0.0/24 --aggressive --service-detection --os-detection
-```
 
-### Enterprise Network Assessment
-```bash
+# Enterprise network assessment
 python main.py 172.16.0.0/16 --threads 32 --ports 1-10000 --aggressive -vv
 ```
 
-## 📊 Understanding Results
+### Sample JSON output
 
-### JSON Output Format
 ```json
 [
   {
@@ -213,66 +115,101 @@ python main.py 172.16.0.0/16 --threads 32 --ports 1-10000 --aggressive -vv
 ]
 ```
 
-## 🛠️ Troubleshooting
+## 🗂️ Project Layout
 
-### Issue: Permission Denied (WiFi Features)
-**Solution:**
+- `main.py` — CLI entry point
+- `gui_launcher.py` — GUI entry point
+- `src/` — scanner engine
+  - `scanner.py` — scan orchestration
+  - `device.py` — device discovery (ping sweep, ARP)
+  - `port_scanner.py` — TCP/UDP port scanning
+  - `service_detector.py` — banner grabbing, service & OS fingerprinting
+  - `deauth.py` — WiFi deauthentication testing (authorized use only)
+  - `results_handler.py` — multi-format result export
+  - `utils.py` — logging, validation, helpers
+- `gui/` — PyQt6 dashboard (`main_window.py`)
+- `tests/` — unit test suite
+
+## 🧪 Development
+
 ```bash
-sudo chmod +u+s /usr/bin/airmon-ng
-sudo chmod +u+s /usr/bin/aireplay-ng
+pip install -r requirements-dev.txt
+
+# Run the test suite
+python -m pytest tests/ -v
+
+# Format & lint
+black src/ gui/ tests/
+flake8 src/ gui/ tests/
 ```
 
-### Issue: PyQt6 Not Found
-**Solution:**
-```bash
-pip install PyQt6 PyQt6-Charts
+CI runs byte-compile checks on Linux and Windows plus the full test suite on every push to `main`.
+
+## 📦 Packaging & Releases
+
+- `setup.py` — standard packaging (version read from the `VERSION` file).
+  Installs `shiba-cuddles` and `shiba-cuddles-gui` console commands.
+- `shibacuddles.spec` — PyInstaller spec for building a standalone binary:
+  `pyinstaller --noconfirm shibacuddles.spec`
+- Pushing a `v*` tag triggers the Release workflow: it builds the Windows `.exe`
+  and Linux binary, generates SHA256 hashes, and attaches everything to the
+  GitHub release automatically.
+
+## ⚠️ WiFi Deauthentication — Legal Warning
+
+**Unauthorized wireless network interference is illegal in most jurisdictions.**
+
+Only use the WiFi testing features for:
+- Testing your own networks
+- Authorized penetration testing
+- Educational purposes
+
+Basic usage:
+
+```python
+from src.deauth import WiFiDeauthenticator, DeauthTarget
+
+deauth = WiFiDeauthenticator()
+deauth.enable_monitor_mode('wlan0')
+
+target = DeauthTarget(
+    mac_address='AA:BB:CC:DD:EE:FF',
+    gateway_mac='11:22:33:44:55:66',
+    ssid='TestNetwork',
+    channel=6,
+    interface='wlan0mon'
+)
+deauth.deauthenticate_device(target)
+deauth.disable_monitor_mode('wlan0mon')
 ```
-
-### Issue: Scan Timeout
-**Solution:** Increase timeout value
-```bash
-python main.py 192.168.1.0/24 --timeout 15
-```
-
-### Issue: High False Negatives
-**Solution:** Disable ping sweep
-```bash
-python main.py 192.168.1.0/24 --no-ping
-```
-
-## 📈 Performance Tips
-
-1. **Threading**: Use more threads for larger networks
-   ```bash
-   python main.py 10.0.0.0/16 --threads 64
-   ```
-
-2. **Port Range**: Scan common ports first
-   ```bash
-   python main.py 192.168.1.0/24 --ports 22,80,443,3306,5432,8080
-   ```
-
-3. **Rate Limiting**: Reduce network load
-   ```bash
-   python main.py 192.168.1.0/24 --rate-limit 0.1
-   ```
-
-4. **Timeout**: Adjust based on network conditions
-   ```bash
-   python main.py 192.168.1.0/24 --timeout 3
-   ```
 
 ## 🔐 Security Considerations
 
-- Always get written permission before scanning networks
+- Always get **written permission** before scanning networks you don't own
 - Comply with local laws and regulations
-- Don't use deauth features on networks you don't own
-- Be mindful of DoS-like behavior
-- Respect network resources
+- Don't use deauth features on networks you don't own or aren't authorized to test
+- Be mindful of DoS-like behavior and respect network resources
 
-## 📝 Configuration File
+## 🛠️ Troubleshooting
+
+| Issue | Fix |
+|---|---|
+| Permission denied (WiFi features) | `sudo chmod +u+s /usr/bin/airmon-ng /usr/bin/aireplay-ng` |
+| PyQt6 not found | `pip install PyQt6 PyQt6-Charts` |
+| Scan timeouts | Raise `--timeout`, e.g. `--timeout 15` |
+| High false negatives | Try `--no-ping` to skip the ping sweep |
+
+### Performance tips
+
+1. **Threading** — more threads for larger networks: `--threads 64`
+2. **Port range** — scan common ports first: `--ports 22,80,443,3306,5432,8080`
+3. **Rate limiting** — reduce network load: `--rate-limit 0.1`
+4. **Timeout** — tune to your network: `--timeout 3`
+
+## ⚙️ Configuration File (optional)
 
 Create `config.yaml` for default settings:
+
 ```yaml
 scanning:
   threads: 20
@@ -297,20 +234,16 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
 
 ## 📄 License
 
-MIT License - See [LICENSE](LICENSE) file for details.
+MIT License — see the [LICENSE](LICENSE) file for details.
 
 ## ⚠️ Disclaimer
 
 **ShibaCuddles is provided as-is for educational and authorized security testing purposes only.**
-
-Unauthorized access to computer systems is illegal. Users are responsible for ensuring they have proper authorization before using this tool on any network or system.
-
-## 🐕 About
-
-ShibaCuddles - "Because every network needs a cuddly scanner!"
-
-Built for security professionals and network administrators to perform efficient, comprehensive network assessments.
+Unauthorized access to computer systems is illegal. Users are responsible for ensuring they have
+proper authorization before using this tool on any network or system.
 
 ---
 
-For more information, visit: https://github.com/thedarkonejesus/ShibaCuddles
+Built for security professionals and network administrators to perform efficient, comprehensive
+network assessments. For more information, visit:
+https://github.com/thedarkonejesus/ShibaCuddles

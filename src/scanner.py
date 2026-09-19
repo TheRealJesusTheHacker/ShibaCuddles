@@ -4,6 +4,7 @@ Orchestrates network scanning operations with optimization and performance tunin
 """
 
 import logging
+import threading
 from typing import List, Dict, Optional, Tuple
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, asdict
@@ -65,11 +66,12 @@ class NetworkScanner:
         rate_limit: float = 0.0,
         batch_size: int = 50,
         skip_broadcast: bool = False,
-        logger: Optional[logging.Logger] = None
+        logger: Optional[logging.Logger] = None,
+        stop_event: Optional[threading.Event] = None
     ):
         """
         Initialize the network scanner.
-        
+
         Args:
             network: Target network in CIDR notation
             threads: Number of worker threads
@@ -78,6 +80,8 @@ class NetworkScanner:
             batch_size: Size of result batches for processing
             skip_broadcast: Skip broadcast/network addresses
             logger: Logger instance
+            stop_event: Optional threading.Event; when set, the scan aborts
+                cooperatively at the next checkpoint and returns partial results
         """
         self.network = network
         self.threads = min(threads, 64)  # Cap at 64 threads
@@ -86,21 +90,23 @@ class NetworkScanner:
         self.batch_size = max(10, batch_size)
         self.skip_broadcast = skip_broadcast
         self.logger = logger or logging.getLogger(__name__)
-        
+        self.stop_event = stop_event or threading.Event()
+
         # Feature flags
         self.ping_sweep = True
         self.enable_service_detection = False
         self.enable_os_detection = False
-        
-        # Initialize components
-        self.device_discovery = DeviceDiscovery(timeout=timeout, logger=self.logger)
+
+        # Initialize components with the CLAMPED values, so the minimums
+        # enforced above actually apply to the components doing the work.
+        self.device_discovery = DeviceDiscovery(timeout=self.timeout, logger=self.logger)
         self.port_scanner = PortScanner(
-            threads=threads,
-            timeout=timeout,
-            rate_limit=rate_limit,
+            threads=self.threads,
+            timeout=self.timeout,
+            rate_limit=self.rate_limit,
             logger=self.logger
         )
-        self.service_detector = ServiceDetector(timeout=timeout, logger=self.logger)
+        self.service_detector = ServiceDetector(timeout=self.timeout, logger=self.logger)
         self.results_handler = ResultsHandler(logger=self.logger)
         
         # Statistics
@@ -113,6 +119,10 @@ class NetworkScanner:
             'hosts_per_second': 0.0
         }
     
+    def _should_stop(self) -> bool:
+        """Check whether a stop was requested via the stop event."""
+        return self.stop_event.is_set()
+
     def scan(self, port_range: str) -> List[ScanResult]:
         """
         Execute comprehensive network scan.
@@ -145,28 +155,28 @@ class NetworkScanner:
                 self.logger.info("Skipping device discovery, scanning all hosts")
             
             # Step 3: Port scanning
-            if alive_ips:
+            if alive_ips and not self._should_stop():
                 self.logger.info("Starting port scanning phase...")
                 results = self._scan_ports(alive_ips, port_range)
-                
+
                 # Count open ports
                 for result in results:
                     self.stats['open_ports_found'] += len(result.open_ports)
-                
+
                 self.logger.info(
                     f"Port scan complete. Found {self.stats['open_ports_found']} open ports"
                 )
-            
+
             # Step 4: Service detection (optional)
-            if self.enable_service_detection and results:
+            if self.enable_service_detection and results and not self._should_stop():
                 self.logger.info("Starting service detection phase...")
                 results = self._detect_services(results)
-            
+
             # Step 5: OS detection (optional)
-            if self.enable_os_detection and results:
+            if self.enable_os_detection and results and not self._should_stop():
                 self.logger.info("Starting OS fingerprinting phase...")
                 results = self._detect_os(results)
-        
+
         finally:
             # Calculate statistics
             self.stats['scan_duration'] = time.time() - start_time
@@ -206,6 +216,12 @@ class NetworkScanner:
             }
             
             for future in as_completed(futures):
+                if self._should_stop():
+                    # Cancel anything not yet running; already-running
+                    # pings finish on their own (short timeouts).
+                    for f in futures:
+                        f.cancel()
+                    break
                 ip = futures[future]
                 try:
                     if future.result():
@@ -220,6 +236,9 @@ class NetworkScanner:
         results = []
         
         for ip in alive_ips:
+            if self._should_stop():
+                self.logger.info("Scan stop requested, aborting port scan")
+                break
             start_time = time.time()
             open_ports = self.port_scanner.scan(ip, port_range)
             scan_time = time.time() - start_time
@@ -240,6 +259,8 @@ class NetworkScanner:
     def _detect_services(self, results: List[ScanResult]) -> List[ScanResult]:
         """Detect services running on open ports."""
         for result in results:
+            if self._should_stop():
+                break
             if result.open_ports:
                 self.logger.debug(f"Detecting services on {result.ip}")
                 result.services = self.service_detector.detect(
@@ -252,6 +273,8 @@ class NetworkScanner:
     def _detect_os(self, results: List[ScanResult]) -> List[ScanResult]:
         """Perform OS fingerprinting."""
         for result in results:
+            if self._should_stop():
+                break
             self.logger.debug(f"Fingerprinting OS on {result.ip}")
             result.os_info = self.service_detector.detect_os(result.ip)
         

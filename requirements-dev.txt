@@ -1,0 +1,17 @@
+# ShibaCuddles - developer & testing tooling only.
+-r requirements.txt
+
+# Testing
+pytest>=7.0.0
+pytest-cov>=3.0.0
+coverage>=7.3.0
+
+# Code quality
+black>=22.0.0
+flake8>=4.0.0
+
+# Packaging
+setuptools>=68.0.0
+wheel>=0.41.0
+build>=1.0.0
+pyinstaller>=6.0.0

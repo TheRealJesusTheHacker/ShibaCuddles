@@ -101,6 +101,11 @@ class DeviceDiscovery:
         Returns:
             MAC address or None if not found
         """
+        # Matches MACs with ':' or '-' separators on any platform, e.g.
+        # Linux:   "192.168.1.1  ether  00:11:22:33:44:55  C  eth0"
+        # Windows: "  192.168.1.1           00-11-22-33-44-55     dynamic"
+        mac_pattern = r"\b([0-9A-Fa-f]{2}(?:[:-][0-9A-Fa-f]{2}){5})\b"
+
         try:
             # Try ARP lookup
             if self.system == "windows":
@@ -110,10 +115,6 @@ class DeviceDiscovery:
                     text=True,
                     timeout=5
                 )
-                # Parse Windows arp output
-                match = re.search(r"([0-9a-f]{2}(?:[-:]|$)){6}", result.stdout, re.IGNORECASE)
-                if match:
-                    return match.group(0).replace("-", ":")
             else:
                 result = subprocess.run(
                     ["arp", "-n", ip],
@@ -121,10 +122,11 @@ class DeviceDiscovery:
                     text=True,
                     timeout=5
                 )
-                # Parse Linux/macOS arp output
-                match = re.search(r"([0-9a-f]{2}(?::$)){6}", result.stdout, re.IGNORECASE)
-                if match:
-                    return match.group(0)
+
+            match = re.search(mac_pattern, result.stdout)
+            if match:
+                # Normalize to colon-separated lowercase
+                return match.group(1).replace("-", ":").lower()
         
         except (subprocess.TimeoutExpired, Exception) as e:
             self.logger.debug(f"ARP lookup for {ip} failed: {e}")

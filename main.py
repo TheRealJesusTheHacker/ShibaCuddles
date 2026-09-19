@@ -73,7 +73,7 @@ Examples:
     parser.add_argument(
         "--ping-sweep", "-ps",
         action="store_true",
-        help="Enable ICMP ping sweep for device discovery"
+        help="Enable ICMP ping sweep for device discovery (on by default; this flag is accepted for explicitness)"
     )
     parser.add_argument(
         "--service-detection", "-sd",
@@ -176,7 +176,9 @@ def main():
         scanner.enable_service_detection = args.service_detection
         scanner.enable_os_detection = args.os_detection
     
-    scanner.ping_sweep = args.ping_sweep and not args.no_ping
+    # Ping sweep is ON by default; --no-ping disables it.
+    # (--ping-sweep is accepted for explicitness but is a no-op.)
+    scanner.ping_sweep = not args.no_ping
     
     try:
         # Run scan

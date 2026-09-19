@@ -118,32 +118,40 @@ class ServiceDetector:
         Returns:
             Banner string or None
         """
+        sock = None
         try:
             sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             sock.settimeout(self.timeout)
             sock.connect((host, port))
-            
+
             # Some services send banners immediately
             try:
                 banner = sock.recv(max_len).decode("utf-8", errors="ignore")
-                sock.close()
-                return banner.strip()
+                if banner.strip():
+                    return banner.strip()
             except socket.timeout:
                 pass
-            
-            # For HTTP, send HEAD request
-            if port in [80, 8080, 8443, 443]:
+
+            # For plaintext HTTP ports, send a HEAD request to elicit a banner.
+            # Never send plaintext HTTP to TLS ports (443/8443): the server
+            # just answers with a TLS alert/reset and no usable banner.
+            if port in (80, 8080):
                 sock.send(b"HEAD / HTTP/1.0\r\n\r\n")
                 banner = sock.recv(max_len).decode("utf-8", errors="ignore")
-                sock.close()
-                return banner.strip()
-            
-            sock.close()
+                if banner.strip():
+                    return banner.strip()
+
             return None
-        
+
         except Exception as e:
             self.logger.debug(f"Banner grab failed for {host}:{port}: {e}")
             return None
+        finally:
+            if sock is not None:
+                try:
+                    sock.close()
+                except Exception:
+                    pass
     
     def _parse_banner(self, banner: str, port: int) -> Dict:
         """
@@ -298,10 +306,13 @@ class VulnerabilityScanner:
         for port, service_info in services.items():
             service_name = service_info.get("name", "")
             version = service_info.get("version", "")
-            
-            if service_name in self.VULNERABILITIES:
-                if version in self.VULNERABILITIES[service_name]:
-                    vuln = self.VULNERABILITIES[service_name][version]
+
+            known_versions = self.VULNERABILITIES.get(service_name, {})
+            for known_version, vuln in known_versions.items():
+                # Tolerant match: detected "7.0p1" matches known "7.0".
+                if version and (version == known_version
+                                or version.startswith(known_version)):
                     vulnerabilities[f"{service_name}-{version}"] = vuln
-        
+                    break
+
         return vulnerabilities

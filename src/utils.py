@@ -89,7 +89,10 @@ def parse_port_spec(port_spec: str) -> List[int]:
                 
                 if not (1 <= start <= 65535) or not (1 <= end <= 65535):
                     raise ValueError(f"Port out of range: {segment}")
-                
+
+                if start > end:
+                    raise ValueError(f"Invalid port range (start > end): {segment}")
+
                 ports.update(range(start, end + 1))
             except ValueError as e:
                 raise ValueError(f"Invalid port range: {segment}") from e

@@ -35,13 +35,24 @@ class ScannerThread(QThread):
     finished = pyqtSignal(list)
     error = pyqtSignal(str)
     
-    def __init__(self, network: str, ports: str, threads: int, timeout: float):
+    def __init__(self, network: str, ports: str, threads: int, timeout: float,
+                 ping_sweep: bool = True, service_detection: bool = False,
+                 os_detection: bool = False, aggressive: bool = False):
         super().__init__()
         self.network = network
         self.ports = ports
         self.threads = threads
         self.timeout = timeout
+        self.ping_sweep = ping_sweep
+        self.service_detection = service_detection
+        self.os_detection = os_detection
+        self.aggressive = aggressive
         self.logger = logging.getLogger(__name__)
+        self._stop_event = threading.Event()
+    
+    def request_stop(self):
+        """Request a cooperative stop of the running scan."""
+        self._stop_event.set()
     
     def run(self):
         """Run the scan in background thread."""
@@ -50,8 +61,16 @@ class ScannerThread(QThread):
                 network=self.network,
                 threads=self.threads,
                 timeout=self.timeout,
-                logger=self.logger
+                logger=self.logger,
+                stop_event=self._stop_event
             )
+            scanner.ping_sweep = self.ping_sweep
+            if self.aggressive:
+                scanner.enable_service_detection = True
+                scanner.enable_os_detection = True
+            else:
+                scanner.enable_service_detection = self.service_detection
+                scanner.enable_os_detection = self.os_detection
             
             results = scanner.scan(self.ports)
             self.finished.emit(results)
@@ -186,9 +205,10 @@ class ShibaCuddlesGUI(QMainWindow):
         
         layout.addStretch()
         
-        container = QWidget()
-        container.setLayout(layout)
-        return QVBoxLayout(container)
+        # Return the layout itself: installing it on a container widget AND
+        # returning a second layout for the same container silently drops
+        # every widget (Qt refuses the second setLayout), leaving a blank panel.
+        return layout
     
     def _create_tabs(self) -> QTabWidget:
         """Create tabbed interface for results."""
@@ -256,7 +276,13 @@ class ShibaCuddlesGUI(QMainWindow):
         self.progress_bar.setValue(0)
         self.log_text.append(f"[{datetime.now().strftime('%H:%M:%S')}] Starting scan on {network}")
         
-        self.scanner_thread = ScannerThread(network, ports, threads, timeout)
+        self.scanner_thread = ScannerThread(
+            network, ports, threads, timeout,
+            ping_sweep=self.ping_sweep_check.isChecked(),
+            service_detection=self.service_detection_check.isChecked(),
+            os_detection=self.os_detection_check.isChecked(),
+            aggressive=self.aggressive_check.isChecked(),
+        )
         self.scanner_thread.finished.connect(self.on_scan_finished)
         self.scanner_thread.error.connect(self.on_scan_error)
         self.scanner_thread.start()
@@ -264,7 +290,9 @@ class ShibaCuddlesGUI(QMainWindow):
     def stop_scan(self):
         """Stop current scan."""
         if self.scanner_thread and self.scanner_thread.isRunning():
-            self.scanner_thread.quit()
+            # Cooperative stop: quit() alone is a no-op here because the
+            # thread runs scan() directly without an event loop.
+            self.scanner_thread.request_stop()
             self.scanner_thread.wait()
             self.log_text.append(f"[{datetime.now().strftime('%H:%M:%S')}] Scan stopped by user")
         

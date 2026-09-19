@@ -95,26 +95,32 @@ class PortScanner:
         Returns:
             True if port is open, False otherwise
         """
+        sock = None
         try:
             # Rate limiting
             if self.rate_limit > 0:
                 time.sleep(self.rate_limit)
-            
+
             # Create socket with timeout
             sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             sock.settimeout(self.timeout)
-            
+
             # Attempt connection
             result = sock.connect_ex((host, port))
-            sock.close()
-            
+
             return result == 0
-        
+
         except (socket.timeout, socket.error):
             return False
         except Exception as e:
             self.logger.debug(f"Unexpected error scanning {host}:{port}: {e}")
             return False
+        finally:
+            if sock is not None:
+                try:
+                    sock.close()
+                except Exception:
+                    pass
     
     def scan_batch(self, hosts: List[str], port_spec: str) -> Dict[str, List[int]]:
         """
@@ -156,19 +162,25 @@ class PortScanner:
         Returns:
             Banner string or empty string if failed
         """
+        sock = None
         try:
             sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             sock.settimeout(self.timeout)
             sock.connect((host, port))
-            
+
             # Receive banner (max 1024 bytes)
             banner = sock.recv(1024).decode("utf-8", errors="ignore").strip()
-            sock.close()
-            
+
             return banner
-        
+
         except (socket.timeout, socket.error, Exception):
             return ""
+        finally:
+            if sock is not None:
+                try:
+                    sock.close()
+                except Exception:
+                    pass
 
 
 class UDPScanner:
@@ -201,13 +213,14 @@ class UDPScanner:
         open_ports = []
         
         for port in ports:
+            sock = None
             try:
                 sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
                 sock.settimeout(self.timeout)
-                
+
                 # Send empty UDP packet
                 sock.sendto(b"", (host, port))
-                
+
                 # Try to receive response
                 try:
                     sock.recvfrom(1024)
@@ -215,10 +228,14 @@ class UDPScanner:
                 except socket.timeout:
                     # No response could mean open or filtered
                     pass
-                
-                sock.close()
-            
+
             except (socket.error, Exception) as e:
                 self.logger.debug(f"UDP scan error on {host}:{port}: {e}")
-        
+            finally:
+                if sock is not None:
+                    try:
+                        sock.close()
+                    except Exception:
+                        pass
+
         return sorted(open_ports)

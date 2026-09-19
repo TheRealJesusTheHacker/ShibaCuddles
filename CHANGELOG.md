@@ -5,7 +5,7 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.2.0] - 2026-09-19
 
 ### Added
 - Initial project setup
@@ -15,6 +15,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - JSON output support
 - Verbose logging
 - Comprehensive test suite
+- PyQt6 GUI dashboard with real-time results and statistics
+- WiFi deauthentication testing module (requires aircrack-ng; authorized testing only)
+- Service fingerprinting (20+ services) and TTL-based OS detection
+- CSV, XML, and plain-text result exports
+- Packaging: `setup.py`, `MANIFEST.in`, `VERSION` file, `shibacuddles.spec` (PyInstaller)
+- CI: byte-compile checks on Linux + Windows, full pytest run on every push
+- Release automation: pushing a `v*` tag builds Windows `.exe` and Linux binaries
+  via PyInstaller and attaches them to the GitHub release with SHA256 hashes
+- Split `requirements.txt` (runtime) / `requirements-dev.txt` (test & tooling)
 
 ### Planned
 - IPv6 support
@@ -47,13 +56,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Planned Releases]
 
-### Version 0.2.0
-- **Target**: Q3 2026
-- Async scanning support
-- Performance optimizations
-- Extended configuration options
-- API interface
-
 ### Version 0.3.0
 - **Target**: Q4 2026
 - IPv6 support
@@ -80,8 +82,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## How to Release
 
-1. Update version in `setup.py` and `__version__.py`
-2. Move changes from `[Unreleased]` to new version
-3. Create Git tag: `git tag v0.x.x`
-4. Build and publish: `python -m build && python -m twine upload dist/*`
-5. Update release notes on GitHub
+1. Move changes from `[Unreleased]` into a new version section below
+2. Bump the version in the `VERSION` file (and `src/__init__.py`)
+3. Commit and push to `main`
+4. Create and push the tag: `git tag v0.x.x && git push origin v0.x.x`
+5. The Release workflow builds the Windows `.exe` and Linux binary with
+   PyInstaller, generates SHA256 hashes, and attaches everything to the
+   GitHub release automatically

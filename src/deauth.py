@@ -259,7 +259,9 @@ class WiFiDeauthenticator:
             duration: How long to send deauth frames (seconds)
         
         Returns:
-            Number of deauth frames sent
+            0 always; the underlying aireplay-ng process runs in continuous
+            deauth mode ("--deauth 0") so no per-frame count is available.
+            (A return of 0 does NOT mean "0 frames sent".)
         """
         if self.system != "linux":
             self.logger.error("Broadcast deauthentication is only supported on Linux")
@@ -404,9 +406,11 @@ class NetworkInterruptor:
         self.logger.warning(f"Jamming channel {channel} for {duration} seconds")
         self.logger.warning("This is a network disruption attack - use only for authorized testing")
         
+        proc = None
         try:
-            # Use mdk3 for WiFi jamming
-            subprocess.Popen(
+            # Use mdk3 for WiFi jamming; keep the handle so the jammer is
+            # always terminated instead of being orphaned after we return.
+            proc = subprocess.Popen(
                 ["sudo", "mdk3", interface, "b", "-c", str(channel)],
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL
@@ -418,6 +422,13 @@ class NetworkInterruptor:
         except Exception as e:
             self.logger.error(f"Error jamming channel: {e}")
             return False
+        finally:
+            if proc is not None and proc.poll() is None:
+                proc.terminate()
+                try:
+                    proc.wait(timeout=5)
+                except Exception:
+                    proc.kill()
     
     def analyze_traffic_patterns(self, interface: str, duration: int = 30) -> Dict:
         """
