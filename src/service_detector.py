@@ -6,6 +6,8 @@ Identifies services and their versions on discovered hosts.
 import logging
 import socket
 import re
+from .utils import create_socket
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Dict, Optional, List
 
 
@@ -58,23 +60,38 @@ class ServiceDetector:
     def detect(self, host: str, ports: List[int]) -> Dict[int, Dict]:
         """
         Detect services on open ports.
-        
+
         Args:
             host: Target IP address
             ports: List of open port numbers
-        
+
         Returns:
             Dictionary mapping port to service information
         """
         services = {}
-        
-        for port in ports:
-            service_info = self.detect_service(host, port)
-            if service_info:
-                services[port] = service_info
-        
+
+        if not ports:
+            return services
+
+        # Parallelize across ports: each banner grab can block up to
+        # self.timeout, so a serial loop stalls on hosts with many ports.
+        # detect_service is thread-safe (locals only, read-only class data).
+        with ThreadPoolExecutor(max_workers=min(20, len(ports))) as executor:
+            future_to_port = {
+                executor.submit(self.detect_service, host, port): port
+                for port in ports
+            }
+            for future in as_completed(future_to_port):
+                port = future_to_port[future]
+                try:
+                    service_info = future.result()
+                except Exception as e:
+                    self.logger.debug(f"Service detection failed on {host}:{port}: {e}")
+                    continue
+                if service_info:
+                    services[port] = service_info
+
         return services
-    
     def detect_service(self, host: str, port: int) -> Optional[Dict]:
         """
         Detect service on a single port.
@@ -120,7 +137,7 @@ class ServiceDetector:
         """
         sock = None
         try:
-            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            sock = create_socket(host, socket.SOCK_STREAM)
             sock.settimeout(self.timeout)
             sock.connect((host, port))
 
@@ -221,7 +238,7 @@ class ServiceDetector:
             from scapy.all import IP, ICMP, sr1
             
             packet = IP(dst=host) / ICMP()
-            reply = sr1(packet, timeout=2, verbose=False)
+            reply = sr1(packet, timeout=self.timeout, verbose=False)
             
             if reply:
                 return reply.ttl
