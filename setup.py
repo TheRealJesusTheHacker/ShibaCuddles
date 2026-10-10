@@ -66,7 +66,7 @@ setup(
     },
     keywords=["network", "scanner", "security", "port-scan", "pentest", "nmap"],
     project_urls={
-        "GitHub": "https://github.com/thedarkonejesus/ShibaCuddles",
-        "Bug Reports": "https://github.com/thedarkonejesus/ShibaCuddles/issues",
+        "GitHub": "https://github.com/TheRealJesusTheHacker/ShibaCuddles",
+        "Bug Reports": "https://github.com/TheRealJesusTheHacker/ShibaCuddles/issues",
     },
 )
