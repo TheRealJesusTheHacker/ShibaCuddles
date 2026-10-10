@@ -16,10 +16,10 @@ No Python needed — grab the latest standalone build from the
 
 | Platform | File |
 |---|---|
-| Windows | [ShibaCuddles.exe](https://github.com/TheRealJesusTheHacker/ShibaCuddles/releases/download/v0.3.0/ShibaCuddles.exe) |
-| Linux | [ShibaCuddles](https://github.com/TheRealJesusTheHacker/ShibaCuddles/releases/download/v0.3.0/ShibaCuddles) |
+| Windows | [ShibaCuddles.exe](https://github.com/TheRealJesusTheHacker/ShibaCuddles/releases/download/v0.3.1/ShibaCuddles.exe) |
+| Linux | [ShibaCuddles](https://github.com/TheRealJesusTheHacker/ShibaCuddles/releases/download/v0.3.1/ShibaCuddles) |
 
-SHA256 checksums ship alongside each release — verify before running:
+SHA256 checksums and signed build-provenance attestations ship alongside each release — verify before running:
 
 ```bash
 sha256sum -c SHA256SUMS-windows.txt   # Windows (Git Bash / WSL)
