@@ -47,3 +47,6 @@ Thumbs.db
 results/
 *.log
 config.yaml
+
+# Wireless testing authorization scope (private, never commit)
+authorized_targets.json
