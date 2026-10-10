@@ -195,6 +195,11 @@ class NetworkScanner:
         """Parse network and return list of target IPs."""
         try:
             network = ipaddress.ip_network(self.network, strict=False)
+            if network.num_addresses > 65536:
+                raise ValueError(
+                    f"Target {self.network} contains {network.num_addresses:,} addresses, "
+                    "exceeding the 65,536-address limit. Narrow the target range."
+                )
             hosts = list(network.hosts())
             
             if self.skip_broadcast:
@@ -211,61 +216,33 @@ class NetworkScanner:
     def _discover_devices(self, target_ips: List[str]) -> List[str]:
         """Discover alive devices using ICMP and ARP."""
         alive_ips = []
-        
+
+        # Submit in chunks so a /16 doesn't queue 65k futures (and ping
+        # subprocesses) up front.
+        chunk_size = 1024
         with ThreadPoolExecutor(max_workers=self.threads) as executor:
-            futures = {
-                executor.submit(self.device_discovery.is_alive, ip): ip
-                for ip in target_ips
-            }
-            
-            for future in as_completed(futures):
-                if self._should_stop():
-                    # Cancel anything not yet running; already-running
-                    # pings finish on their own (short timeouts).
-                    for f in futures:
-                        f.cancel()
-                    break
-                ip = futures[future]
-                try:
-                    if future.result():
-                        alive_ips.append(ip)
-                except Exception as e:
-                    self.logger.debug(f"Error checking {ip}: {e}")
-        
+            for chunk_start in range(0, len(target_ips), chunk_size):
+                chunk = target_ips[chunk_start:chunk_start + chunk_size]
+                futures = {
+                    executor.submit(self.device_discovery.is_alive, ip): ip
+                    for ip in chunk
+                }
+
+                for future in as_completed(futures):
+                    if self._should_stop():
+                        # Cancel anything not yet running; already-running
+                        # pings finish on their own (short timeouts).
+                        for f in futures:
+                            f.cancel()
+                        break
+                    ip = futures[future]
+                    try:
+                        if future.result():
+                            alive_ips.append(ip)
+                    except Exception as e:
+                        self.logger.debug(f"Error checking {ip}: {e}")
+
         return sorted(alive_ips)
-    
-    def _scan_ports(self, alive_ips: List[str], port_range: str) -> List[ScanResult]:
-        """Scan ports on alive hosts."""
-        results = []
-        total = len(alive_ips)
-
-        for idx, ip in enumerate(alive_ips, 1):
-            if self._should_stop():
-                self.logger.info("Scan stop requested, aborting port scan")
-                break
-            start_time = time.time()
-            open_ports = self.port_scanner.scan(ip, port_range)
-            scan_time = time.time() - start_time
-
-            result = ScanResult(
-                ip=ip,
-                alive=True,
-                open_ports=sorted(open_ports),
-                scan_time=scan_time
-            )
-            results.append(result)
-
-            if self.progress_callback is not None:
-                try:
-                    self.progress_callback(idx, total)
-                except Exception:
-                    pass
-
-            if open_ports:
-                self.logger.debug(f"{ip}: Found {len(open_ports)} open ports")
-
-        return results
-    
     def _map_parallel(self, func, results: List[ScanResult]) -> List[ScanResult]:
         """Apply func to each result in a thread pool, preserving order."""
         ordered: List[Optional[ScanResult]] = [None] * len(results)
@@ -349,9 +326,9 @@ class NetworkScanner:
         print(f"Statistics: {self._format_statistics()}")
         print("="*80 + "\n")
     
-    def save_results(self, results: List[ScanResult], filepath: str, format: str = "json") -> None:
+    def save_results(self, results: List[ScanResult], filepath: str, format: str = "json", force: bool = False) -> None:
         """Save results to file."""
-        self.results_handler.save(results, filepath, format)
+        self.results_handler.save(results, filepath, format, force)
     
     def _format_statistics(self) -> str:
         """Format scan statistics."""
