@@ -7,7 +7,7 @@ import socket
 import threading
 import logging
 import time
-from typing import List, Dict, Set
+from typing import List, Dict, Set, Optional
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from queue import Queue
 
@@ -29,7 +29,8 @@ class PortScanner:
         threads: int = 10,
         timeout: float = 5.0,
         rate_limit: float = 0.0,
-        logger: logging.Logger = None
+        logger: logging.Logger = None,
+        stop_event: Optional[threading.Event] = None
     ):
         """
         Initialize port scanner.
@@ -39,12 +40,19 @@ class PortScanner:
             timeout: Socket timeout in seconds
             rate_limit: Delay between scans in seconds
             logger: Logger instance
+            stop_event: Optional threading.Event; when set, an in-progress
+                scan aborts cooperatively at the next checkpoint
         """
         self.threads = max(1, min(threads, 100))
         self.timeout = max(0.1, timeout)
         self.rate_limit = max(0.0, rate_limit)
         self.logger = logger or logging.getLogger(__name__)
         self.lock = threading.Lock()
+        self.stop_event = stop_event or threading.Event()
+
+    def _should_stop(self) -> bool:
+        """Check whether a stop was requested via the stop event."""
+        return self.stop_event.is_set()
     
     def scan(self, host: str, port_spec: str) -> List[int]:
         """
@@ -74,6 +82,10 @@ class PortScanner:
             }
             
             for future in as_completed(futures):
+                if self._should_stop():
+                    for f in futures:
+                        f.cancel()
+                    break
                 port = futures[future]
                 try:
                     if future.result():
@@ -81,7 +93,7 @@ class PortScanner:
                         self.logger.debug(f"{host}:{port} is OPEN")
                 except Exception as e:
                     self.logger.debug(f"Error scanning {host}:{port}: {e}")
-        
+
         return sorted(open_ports)
     
     def _check_port(self, host: str, port: int) -> bool:
@@ -187,55 +199,94 @@ class UDPScanner:
     """
     UDP port scanner for service discovery.
     """
-    
-    def __init__(self, timeout: float = 3.0, logger: logging.Logger = None):
+
+    def __init__(
+        self,
+        timeout: float = 3.0,
+        threads: int = 20,
+        logger: logging.Logger = None,
+        stop_event: Optional[threading.Event] = None
+    ):
         """
         Initialize UDP scanner.
-        
+
         Args:
             timeout: Socket timeout in seconds
+            threads: Number of worker threads
             logger: Logger instance
+            stop_event: Optional threading.Event for cooperative stop
         """
         self.timeout = max(0.1, timeout)
+        self.threads = max(1, min(threads, 100))
         self.logger = logger or logging.getLogger(__name__)
-    
+        self.stop_event = stop_event or threading.Event()
+
+    def _check_udp_port(self, host: str, port: int) -> bool:
+        """
+        Probe a single UDP port.
+
+        Args:
+            host: Target IP address
+            port: Port number
+
+        Returns:
+            True if a response was received, False otherwise
+        """
+        sock = None
+        try:
+            sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            sock.settimeout(self.timeout)
+
+            # Send empty UDP packet
+            sock.sendto(b"", (host, port))
+
+            # Try to receive response
+            try:
+                sock.recvfrom(1024)
+                return True
+            except socket.timeout:
+                # No response could mean open or filtered
+                return False
+
+        except (socket.error, Exception) as e:
+            self.logger.debug(f"UDP scan error on {host}:{port}: {e}")
+            return False
+        finally:
+            if sock is not None:
+                try:
+                    sock.close()
+                except Exception:
+                    pass
+
     def scan(self, host: str, ports: List[int]) -> List[int]:
         """
-        Scan UDP ports (ICMP-based detection).
-        
+        Scan UDP ports (ICMP-based detection), in parallel.
+
         Args:
             host: Target IP address
             ports: List of port numbers to scan
-        
+
         Returns:
             List of ports with responses
         """
         open_ports = []
-        
-        for port in ports:
-            sock = None
-            try:
-                sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-                sock.settimeout(self.timeout)
 
-                # Send empty UDP packet
-                sock.sendto(b"", (host, port))
+        with ThreadPoolExecutor(max_workers=self.threads) as executor:
+            futures = {
+                executor.submit(self._check_udp_port, host, port): port
+                for port in ports
+            }
 
-                # Try to receive response
+            for future in as_completed(futures):
+                if self.stop_event.is_set():
+                    for f in futures:
+                        f.cancel()
+                    break
+                port = futures[future]
                 try:
-                    sock.recvfrom(1024)
-                    open_ports.append(port)
-                except socket.timeout:
-                    # No response could mean open or filtered
-                    pass
-
-            except (socket.error, Exception) as e:
-                self.logger.debug(f"UDP scan error on {host}:{port}: {e}")
-            finally:
-                if sock is not None:
-                    try:
-                        sock.close()
-                    except Exception:
-                        pass
+                    if future.result():
+                        open_ports.append(port)
+                except Exception as e:
+                    self.logger.debug(f"UDP scan error on {host}:{port}: {e}")
 
         return sorted(open_ports)
