@@ -7,6 +7,7 @@ import sys
 import threading
 from typing import List, Dict
 from datetime import datetime
+from pathlib import Path
 
 try:
     from PyQt6.QtWidgets import (
@@ -804,8 +805,17 @@ class ShibaCuddlesGUI(QMainWindow):
                 "json"
             )
 
+            if Path(file_path).exists():
+                reply = QMessageBox.question(
+                    self, "Overwrite?",
+                    f"{file_path} already exists.\nOverwrite it?",
+                    QMessageBox.Yes | QMessageBox.No, QMessageBox.No
+                )
+                if reply != QMessageBox.Yes:
+                    return
+
             handler = ResultsHandler()
-            if handler.save(self.scan_results, file_path, export_format):
+            if handler.save(self.scan_results, file_path, export_format, force=True):
                 QMessageBox.information(
                     self,
                     "Export Successful",
