@@ -2,10 +2,10 @@
 # Dev/test tooling lives in requirements-dev.txt.
 
 # Core: packet crafting for ARP/ICMP discovery (imported lazily at runtime)
-scapy>=2.5.0
+scapy==2.8.0
 
 # GUI dashboard
-PyQt6>=6.0.0
+PyQt6==6.11.0
 PyQt6-Charts>=6.0.0
 
 # WiFi testing helpers (install separately via your OS package manager):
