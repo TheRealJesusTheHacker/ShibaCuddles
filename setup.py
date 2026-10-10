@@ -29,11 +29,11 @@ LONG_DESCRIPTION = README_FILE.read_text(encoding="utf-8") if README_FILE.exists
 setup(
     name="shibacuddles",
     version=VERSION,
-    author="thedarkonejesus",
+    author="TheRealJesusTheHacker",
     description="Advanced network scanner & security testing suite with CLI and GUI.",
     long_description=LONG_DESCRIPTION,
     long_description_content_type="text/markdown",
-    url="https://github.com/thedarkonejesus/ShibaCuddles",
+    url="https://github.com/TheRealJesusTheHacker/ShibaCuddles",
     license="MIT",
     classifiers=[
         "Development Status :: 4 - Beta",
