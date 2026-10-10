@@ -21,9 +21,11 @@ class AuthorizationError(PermissionError):
 
 def _candidate_paths():
     here = os.path.dirname(os.path.abspath(__file__))
+    # ~/.config wins over the working directory: a planted scope file in a
+    # shared directory must not silently widen the authorization gate.
     return [
-        os.path.join(os.getcwd(), SCOPE_FILENAME),
         os.path.join(os.path.expanduser("~"), ".config", "shibacuddles", SCOPE_FILENAME),
+        os.path.join(os.getcwd(), SCOPE_FILENAME),
         os.path.join(here, SCOPE_FILENAME),
         os.path.join(os.path.dirname(here), SCOPE_FILENAME),
     ]
@@ -42,8 +44,11 @@ def load_scope():
     path = scope_file_path()
     if not path:
         return []
-    with open(path, "r", encoding="utf-8") as fh:
-        data = json.load(fh)
+    try:
+        with open(path, "r", encoding="utf-8") as fh:
+            data = json.load(fh)
+    except (OSError, ValueError) as e:  # ValueError covers JSONDecodeError
+        raise AuthorizationError(f"Scope file unreadable: {path}: {e}")
     networks = data.get("networks", []) if isinstance(data, dict) else []
     return [n for n in networks if isinstance(n, dict)]
 
@@ -65,7 +70,7 @@ def is_authorized(ssid=None, bssid=None):
         e_bssid = _norm_bssid(entry.get("bssid", ""))
         if bssid and e_bssid and bssid == e_bssid:
             return True
-        if ssid and e_ssid and ssid.lower() == e_ssid.lower():
+        if ssid and e_ssid and ssid == e_ssid:
             return True
     return False
 
@@ -74,8 +79,11 @@ def require_authorized(ssid=None, bssid=None, action="wireless attack"):
     """Raise AuthorizationError unless the target is in the authorized scope."""
     if not is_authorized(ssid=ssid, bssid=bssid):
         target = bssid or ssid or "<unspecified>"
+        in_effect = scope_file_path()
+        where = (f"Scope file in effect: {in_effect}."
+                 if in_effect else "No scope file found in any search location.")
         raise AuthorizationError(
-            f"Refusing {action} against '{target}': not in authorized scope. "
+            f"Refusing {action} against '{target}': not in authorized scope. {where} "
             f"Add the network to {SCOPE_FILENAME} (see {EXAMPLE_FILENAME}) — "
             "only networks you own or have written permission to test may be listed."
         )
@@ -89,8 +97,10 @@ def require_scope_configured(action="wireless attack"):
     an authorization scope first.
     """
     if not load_scope():
+        searched = ", ".join(_candidate_paths())
         raise AuthorizationError(
             f"Refusing {action}: no authorized scope configured. "
             f"Create {SCOPE_FILENAME} (see {EXAMPLE_FILENAME}) listing the networks "
-            "you own or have written permission to test."
+            "you own or have written permission to test. "
+            f"Searched: {searched}."
         )
