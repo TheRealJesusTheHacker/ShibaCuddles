@@ -6,6 +6,7 @@ Implements ICMP and ARP-based host discovery.
 import subprocess
 import platform
 import logging
+import math
 import socket
 import re
 from typing import List, Optional
@@ -40,7 +41,7 @@ class DeviceDiscovery:
             timeout: Ping timeout in seconds
             logger: Logger instance
         """
-        self.timeout = max(1, int(timeout))
+        self.timeout = max(1.0, float(timeout))
         self.logger = logger or logging.getLogger(__name__)
         self.system = platform.system().lower()
     
@@ -57,9 +58,9 @@ class DeviceDiscovery:
         try:
             # Platform-specific ping command
             if self.system == "windows":
-                cmd = ["ping", "-n", "1", "-w", str(self.timeout * 1000), ip]
+                cmd = ["ping", "-n", "1", "-w", str(int(self.timeout * 1000)), ip]
             else:  # Linux, macOS, etc.
-                cmd = ["ping", "-c", "1", "-W", str(self.timeout), ip]
+                cmd = ["ping", "-c", "1", "-W", str(math.ceil(self.timeout)), ip]
             
             # Execute ping
             result = subprocess.run(
