@@ -11,6 +11,8 @@ jobs:
     runs-on: windows-latest
     permissions:
       contents: write
+      attestations: write
+      id-token: write
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -28,6 +30,12 @@ jobs:
           cd dist
           Get-ChildItem *.exe | ForEach-Object { "{0}  {1}" -f (Get-FileHash $_.FullName -Algorithm SHA256).Hash, $_.Name } | Out-File -Encoding ascii SHA256SUMS-windows.txt
           Get-Content SHA256SUMS-windows.txt
+      - name: Attest build provenance
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8  # v4
+        with:
+          subject-path: |
+            dist/*.exe
+            dist/SHA256SUMS-windows.txt
       - name: Upload to GitHub Release
         uses: softprops/action-gh-release@v2
         with:
@@ -41,6 +49,8 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+      attestations: write
+      id-token: write
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -57,6 +67,12 @@ jobs:
           cd dist
           sha256sum ShibaCuddles > SHA256SUMS-linux.txt
           cat SHA256SUMS-linux.txt
+      - name: Attest build provenance
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8  # v4
+        with:
+          subject-path: |
+            dist/ShibaCuddles
+            dist/SHA256SUMS-linux.txt
       - name: Upload to GitHub Release
         uses: softprops/action-gh-release@v2
         with:
