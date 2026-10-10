@@ -274,8 +274,15 @@ class ServiceDetector:
 class VulnerabilityScanner:
     """
     Basic vulnerability scanning based on service versions.
+
+    DEMO DATA ONLY: the VULNERABILITIES table below is a tiny, stale sample
+    (4 entries, CVEs from 2007-2021) for demonstration purposes. It is NOT a
+    real vulnerability feed -- a service with no match here is NOT known to
+    be safe, and matches may be false positives. Do not rely on it for
+    security decisions.
     """
-    
+
+    # DEMO DATA ONLY -- see class docstring. Not a real vulnerability feed.
     VULNERABILITIES = {
         "OpenSSH": {
             "5.0": "CVE-2007-3477 - Privilege escalation",
