@@ -12,6 +12,10 @@ import struct
 from typing import List, Dict, Optional, Tuple
 from dataclasses import dataclass
 import time
+import os
+import secrets
+import tempfile
+import shutil
 
 
 @dataclass
@@ -178,20 +182,27 @@ class WiFiDeauthenticator:
         try:
             networks = []
             
-            # Use airodump-ng to scan networks
-            result = subprocess.run(
-                ["sudo", "airodump-ng", "-w", "/tmp/scan", "-o", "csv", 
-                 "--write-interval", str(duration), interface],
-                capture_output=True,
-                text=True,
-                timeout=duration + 5
-            )
-            
-            # Parse results
-            if result.returncode == 0:
-                self.logger.info(f"WiFi scan complete")
-            
-            return networks
+            # Capture files go into a private temp dir -- never a predictable
+            # /tmp path. airodump-ng appends its own suffixes to the prefix.
+            scan_dir = tempfile.mkdtemp(prefix="shibacuddles_scan_")
+            scan_prefix = os.path.join(scan_dir, "scan")
+            try:
+                # Use airodump-ng to scan networks
+                result = subprocess.run(
+                    ["sudo", "airodump-ng", "-w", scan_prefix, "-o", "csv",
+                     "--write-interval", str(duration), interface],
+                    capture_output=True,
+                    text=True,
+                    timeout=duration + 5
+                )
+
+                # Parse results
+                if result.returncode == 0:
+                    self.logger.info(f"WiFi scan complete")
+
+                return networks
+            finally:
+                shutil.rmtree(scan_dir, ignore_errors=True)
         
         except subprocess.TimeoutExpired:
             self.logger.debug("WiFi scan timeout (expected)")
@@ -311,25 +322,41 @@ class WiFiDeauthenticator:
         self.logger.warning(f"Creating rogue AP: {ssid}")
         
         try:
-            # Use hostapd to create AP
-            config = self._generate_hostapd_config(interface, ssid, channel)
-            
-            with open("/tmp/hostapd.conf", "w") as f:
-                f.write(config)
-            
-            result = subprocess.run(
-                ["sudo", "hostapd", "/tmp/hostapd.conf"],
-                capture_output=True,
-                timeout=60
-            )
-            
-            return result.returncode == 0
-        
+            # Use hostapd to create AP.
+            # A fresh random WPA passphrase is generated on every run --
+            # credentials must never be hardcoded.
+            passphrase = secrets.token_urlsafe(16)
+            print(f"[+] Rogue AP WPA passphrase (generated, shown once): {passphrase}")
+            config = self._generate_hostapd_config(
+                interface, ssid, channel, passphrase)
+
+            # Write the config to a private temp file (never a predictable
+            # /tmp path) and always delete it afterwards.
+            fd, hostapd_conf = tempfile.mkstemp(
+                prefix="shibacuddles_hostapd_", suffix=".conf")
+            os.close(fd)
+            try:
+                with open(hostapd_conf, "w") as f:
+                    f.write(config)
+
+                result = subprocess.run(
+                    ["sudo", "hostapd", hostapd_conf],
+                    capture_output=True,
+                    timeout=60
+                )
+
+                return result.returncode == 0
+            finally:
+                try:
+                    os.unlink(hostapd_conf)
+                except OSError:
+                    pass
+
         except Exception as e:
             self.logger.error(f"Error creating rogue AP: {e}")
             return False
     
-    def _generate_hostapd_config(self, interface: str, ssid: str, channel: int) -> str:
+    def _generate_hostapd_config(self, interface: str, ssid: str, channel: int, passphrase: str) -> str:
         """
         Generate hostapd configuration.
         
@@ -347,7 +374,7 @@ ssid={ssid}
 channel={channel}
 driver=nl80211
 wpa=2
-wpa_passphrase=TestPassword123
+wpa_passphrase={passphrase}
 wpa_key_mgmt=WPA-PSK
 wpa_pairwise=CCMP
 """
