@@ -146,7 +146,7 @@ python main.py 172.16.0.0/16 --threads 32 --ports 1-10000 --aggressive -vv
   - `device.py` — device discovery (ping sweep, ARP)
   - `port_scanner.py` — TCP/UDP port scanning
   - `service_detector.py` — banner grabbing, service & OS fingerprinting
-  - `deauth.py` — WiFi deauthentication testing (authorized use only)
+  - `deauth.py` — WiFi deauthentication testing (scope-gated, authorized use only)
   - `results_handler.py` — multi-format result export
   - `utils.py` — logging, validation, helpers
 - `gui/` — PyQt6 dashboard (`main_window.py`)
@@ -177,9 +177,20 @@ CI runs byte-compile checks on Linux and Windows plus the full test suite on eve
   and Linux binary, generates SHA256 hashes, and attaches everything to the
   GitHub release automatically.
 
-## ⚠️ WiFi Deauthentication — Legal Warning
+## ⚠️ WiFi Deauthentication — Authorized Use Only
 
 **Unauthorized wireless network interference is illegal in most jurisdictions.**
+
+The WiFi attack functions (`deauthenticate_device`, `deauthenticate_all_devices`,
+`create_rogue_ap`, `jam_channel`) are gated behind an authorization scope file.
+Each one checks its target against `authorized_targets.json` **before transmitting
+anything** — a target that isn't listed is refused, with no override.
+
+1. Copy `authorized_targets.example.json` to `authorized_targets.json`
+   (it is gitignored — your scope never gets committed).
+2. List only networks you own or have **written** permission to test.
+3. The tool looks for the file in the working directory,
+   `~/.config/shibacuddles/`, or the `src/` directory.
 
 Only use the WiFi testing features for:
 - Testing your own networks
