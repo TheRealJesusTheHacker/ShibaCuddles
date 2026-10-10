@@ -1,0 +1,15 @@
+{
+  "_comment": "Copy this file to authorized_targets.json and list ONLY networks you own or have WRITTEN permission to test. Wireless attack functions in src/deauth.py refuse to run against anything not listed here. authorized_targets.json is gitignored - never commit your real scope file.",
+  "networks": [
+    {
+      "ssid": "MyHomeLab",
+      "bssid": "AA:BB:CC:DD:EE:FF",
+      "note": "home lab AP - owned"
+    },
+    {
+      "ssid": "ClientSite-Guest",
+      "bssid": "11:22:33:44:55:66",
+      "note": "written authorization dated 2026-10-01"
+    }
+  ]
+}
