@@ -26,7 +26,7 @@ class ResultsHandler:
         """
         self.logger = logger or logging.getLogger(__name__)
     
-    def save(self, results: List, filepath: str, format: str = "json") -> bool:
+    def save(self, results: List, filepath: str, format: str = "json", force: bool = False) -> bool:
         """
         Save results to file in specified format.
         
@@ -39,6 +39,11 @@ class ResultsHandler:
             True if successful, False otherwise
         """
         try:
+            if not force and Path(filepath).exists():
+                raise FileExistsError(
+                    f"Refusing to overwrite existing file: {filepath} "
+                    "(pass force=True or use --force to overwrite)"
+                )
             # Auto-detect format from file extension if not specified
             if format == "json" and filepath.endswith(".csv"):
                 format = "csv"
@@ -176,7 +181,12 @@ class ResultsHandler:
                 if os_info:
                     f.write(f"OS: {os_info.get('name', 'Unknown')} (Confidence: {os_info.get('confidence', 0)}%)\n")
                 
-                f.write(f"Scan Time: {result_dict.get('scan_time', 0):.2f}s\n")
+                scan_time = result_dict.get('scan_time', 0)
+                try:
+                    scan_time_str = f"{float(scan_time):.2f}s"
+                except (TypeError, ValueError):
+                    scan_time_str = str(scan_time)
+                f.write(f"Scan Time: {scan_time_str}\n")
                 f.write("-" * 80 + "\n\n")
     
     def generate_report(self, results: List) -> str:
