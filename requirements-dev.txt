@@ -3,7 +3,7 @@
 
 # Testing
 pytest>=7.0.0
-pytest-cov>=3.0.0
+pytest-cov>=7.1.0
 coverage>=7.3.0
 
 # Code quality
