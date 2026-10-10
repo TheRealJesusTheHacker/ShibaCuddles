@@ -16,6 +16,10 @@ import os
 import secrets
 import tempfile
 import shutil
+try:
+    from .scope import require_authorized, require_scope_configured
+except ImportError:  # module executed as a top-level script
+    from scope import require_authorized, require_scope_configured
 
 
 @dataclass
@@ -221,6 +225,7 @@ class WiFiDeauthenticator:
         Returns:
             True if deauthentication sent successfully
         """
+        require_authorized(ssid=target.ssid, bssid=target.gateway_mac, action="deauthenticate_device")
         if self.system != "linux":
             self.logger.error("Deauthentication is only supported on Linux")
             return False
@@ -274,6 +279,7 @@ class WiFiDeauthenticator:
             deauth mode ("--deauth 0") so no per-frame count is available.
             (A return of 0 does NOT mean "0 frames sent".)
         """
+        require_authorized(ssid=ssid, bssid=gateway_mac, action="deauthenticate_all_devices")
         if self.system != "linux":
             self.logger.error("Broadcast deauthentication is only supported on Linux")
             return 0
@@ -315,6 +321,7 @@ class WiFiDeauthenticator:
         Returns:
             True if successful
         """
+        require_authorized(ssid=ssid, action="create_rogue_ap")
         if self.system != "linux":
             self.logger.error("Rogue AP creation is only supported on Linux")
             return False
@@ -430,6 +437,7 @@ class NetworkInterruptor:
         Returns:
             True if jamming started
         """
+        require_scope_configured(action="jam_channel")
         self.logger.warning(f"Jamming channel {channel} for {duration} seconds")
         self.logger.warning("This is a network disruption attack - use only for authorized testing")
         
