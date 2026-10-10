@@ -10,6 +10,7 @@ import time
 from typing import List, Dict, Set, Optional
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from queue import Queue
+from .utils import create_socket
 
 
 class PortScanner:
@@ -114,7 +115,7 @@ class PortScanner:
                 time.sleep(self.rate_limit)
 
             # Create socket with timeout
-            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            sock = create_socket(host, socket.SOCK_STREAM)
             sock.settimeout(self.timeout)
 
             # Attempt connection
@@ -134,35 +135,7 @@ class PortScanner:
                 except Exception:
                     pass
     
-    def scan_batch(self, hosts: List[str], port_spec: str) -> Dict[str, List[int]]:
-        """
-        Scan multiple hosts in parallel.
-        
-        Args:
-            hosts: List of target IP addresses
-            port_spec: Port specification
-        
-        Returns:
-            Dictionary mapping host to list of open ports
-        """
-        results = {}
-        
-        with ThreadPoolExecutor(max_workers=self.threads) as executor:
-            futures = {
-                executor.submit(self.scan, host, port_spec): host
-                for host in hosts
-            }
-            
-            for future in as_completed(futures):
-                host = futures[future]
-                try:
-                    results[host] = future.result()
-                except Exception as e:
-                    self.logger.error(f"Error scanning {host}: {e}")
-                    results[host] = []
-        
-        return results
-    
+
     def grab_banner(self, host: str, port: int) -> str:
         """
         Attempt to grab service banner from open port.
@@ -176,7 +149,7 @@ class PortScanner:
         """
         sock = None
         try:
-            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            sock = create_socket(host, socket.SOCK_STREAM)
             sock.settimeout(self.timeout)
             sock.connect((host, port))
 
@@ -234,7 +207,7 @@ class UDPScanner:
         """
         sock = None
         try:
-            sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            sock = create_socket(host, socket.SOCK_DGRAM)
             sock.settimeout(self.timeout)
 
             # Send empty UDP packet
