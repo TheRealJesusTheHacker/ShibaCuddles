@@ -5,7 +5,7 @@ Orchestrates network scanning operations with optimization and performance tunin
 
 import logging
 import threading
-from typing import List, Dict, Optional, Tuple
+from typing import List, Dict, Optional, Tuple, Callable
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, asdict
 import time
@@ -67,7 +67,8 @@ class NetworkScanner:
         batch_size: int = 50,
         skip_broadcast: bool = False,
         logger: Optional[logging.Logger] = None,
-        stop_event: Optional[threading.Event] = None
+        stop_event: Optional[threading.Event] = None,
+        progress_callback: Optional[Callable[[int, int], None]] = None
     ):
         """
         Initialize the network scanner.
@@ -85,12 +86,13 @@ class NetworkScanner:
         """
         self.network = network
         self.threads = min(threads, 64)  # Cap at 64 threads
-        self.timeout = max(1.0, timeout)  # Minimum 1 second
+        self.timeout = max(0.2, timeout)  # Minimum 0.2 seconds (sub-second allowed)
         self.rate_limit = max(0.0, rate_limit)
         self.batch_size = max(10, batch_size)
         self.skip_broadcast = skip_broadcast
         self.logger = logger or logging.getLogger(__name__)
         self.stop_event = stop_event or threading.Event()
+        self.progress_callback = progress_callback
 
         # Feature flags
         self.ping_sweep = True
@@ -104,7 +106,8 @@ class NetworkScanner:
             threads=self.threads,
             timeout=self.timeout,
             rate_limit=self.rate_limit,
-            logger=self.logger
+            logger=self.logger,
+            stop_event=self.stop_event
         )
         self.service_detector = ServiceDetector(timeout=self.timeout, logger=self.logger)
         self.results_handler = ResultsHandler(logger=self.logger)
@@ -234,15 +237,16 @@ class NetworkScanner:
     def _scan_ports(self, alive_ips: List[str], port_range: str) -> List[ScanResult]:
         """Scan ports on alive hosts."""
         results = []
-        
-        for ip in alive_ips:
+        total = len(alive_ips)
+
+        for idx, ip in enumerate(alive_ips, 1):
             if self._should_stop():
                 self.logger.info("Scan stop requested, aborting port scan")
                 break
             start_time = time.time()
             open_ports = self.port_scanner.scan(ip, port_range)
             scan_time = time.time() - start_time
-            
+
             result = ScanResult(
                 ip=ip,
                 alive=True,
@@ -250,35 +254,63 @@ class NetworkScanner:
                 scan_time=scan_time
             )
             results.append(result)
-            
+
+            if self.progress_callback is not None:
+                try:
+                    self.progress_callback(idx, total)
+                except Exception:
+                    pass
+
             if open_ports:
                 self.logger.debug(f"{ip}: Found {len(open_ports)} open ports")
-        
+
         return results
     
+    def _map_parallel(self, func, results: List[ScanResult]) -> List[ScanResult]:
+        """Apply func to each result in a thread pool, preserving order."""
+        ordered: List[Optional[ScanResult]] = [None] * len(results)
+        with ThreadPoolExecutor(max_workers=self.threads) as executor:
+            futures = {
+                executor.submit(func, result): idx
+                for idx, result in enumerate(results)
+            }
+            for future in as_completed(futures):
+                if self._should_stop():
+                    for f in futures:
+                        f.cancel()
+                    break
+                idx = futures[future]
+                try:
+                    ordered[idx] = future.result()
+                except Exception as e:
+                    self.logger.debug(f"Parallel task failed: {e}")
+                    ordered[idx] = results[idx]
+        for idx, res in enumerate(ordered):
+            if res is None:
+                ordered[idx] = results[idx]
+        return ordered
+
     def _detect_services(self, results: List[ScanResult]) -> List[ScanResult]:
-        """Detect services running on open ports."""
-        for result in results:
-            if self._should_stop():
-                break
+        """Detect services running on open ports (parallel across hosts)."""
+        def _detect_one(result: ScanResult) -> ScanResult:
             if result.open_ports:
                 self.logger.debug(f"Detecting services on {result.ip}")
                 result.services = self.service_detector.detect(
                     result.ip,
                     result.open_ports
                 )
-        
-        return results
-    
+            return result
+
+        return self._map_parallel(_detect_one, results)
+
     def _detect_os(self, results: List[ScanResult]) -> List[ScanResult]:
-        """Perform OS fingerprinting."""
-        for result in results:
-            if self._should_stop():
-                break
+        """Perform OS fingerprinting (parallel across hosts)."""
+        def _fingerprint_one(result: ScanResult) -> ScanResult:
             self.logger.debug(f"Fingerprinting OS on {result.ip}")
             result.os_info = self.service_detector.detect_os(result.ip)
-        
-        return results
+            return result
+
+        return self._map_parallel(_fingerprint_one, results)
     
     def print_results(self, results: List[ScanResult]) -> None:
         """Display results in human-readable format."""
