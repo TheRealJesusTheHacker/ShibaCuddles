@@ -33,6 +33,15 @@ except Exception:
     _APP_VERSION = "0.1.0"
 
 
+def _is_private_target(network: str) -> bool:
+    """Return True if the target is private (RFC1918) address space."""
+    import ipaddress
+    try:
+        return ipaddress.ip_network(network.strip(), strict=False).is_private
+    except ValueError:
+        return False
+
+
 # ---------------------------------------------------------------------------
 # Theme
 # ---------------------------------------------------------------------------
@@ -619,6 +628,22 @@ class ShibaCuddlesGUI(QMainWindow):
             QMessageBox.warning(self, "Missing Target",
                                 "Please enter a target network in CIDR notation.")
             return
+
+        # Scope guardrail: warn before scanning non-private address space.
+        if not _is_private_target(network):
+            reply = QMessageBox.warning(
+                self,
+                "Non-private target",
+                f"{network} is NOT private (RFC1918) address space.\n\n"
+                "Scanning a network you do not own or are not authorized "
+                "to test may be illegal.\n\n"
+                "Continue only if you are authorized to scan this target.",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.No,
+            )
+            if reply != QMessageBox.StandardButton.Yes:
+                self._log("Scan aborted: non-private target not confirmed", "warn")
+                return
 
         self.scan_button.setEnabled(False)
         self.scan_button.setText("Scanning…")
