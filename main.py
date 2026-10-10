@@ -132,8 +132,23 @@ Examples:
         action="store_true",
         help="Skip broadcast and network addresses"
     )
+    parser.add_argument(
+        "--yes", "-y",
+        action="store_true",
+        help="Skip the authorization confirmation prompt for non-private "
+             "targets (only use on networks you own or are authorized to test)"
+    )
     
     return parser.parse_args()
+
+
+def _is_private_target(network: str) -> bool:
+    """Return True if the target network is private (RFC1918) address space."""
+    import ipaddress
+    try:
+        return ipaddress.ip_network(network, strict=False).is_private
+    except ValueError:
+        return False
 
 
 def main():
@@ -156,6 +171,25 @@ def main():
     if not validate_network(args.network):
         logger.error(f"Invalid network: {args.network}")
         sys.exit(1)
+
+    # Scope guardrail: warn loudly when the target is not private address
+    # space, and require explicit confirmation unless --yes was passed.
+    if not _is_private_target(args.network):
+        print(f"WARNING: {args.network} is NOT private (RFC1918) address space.")
+        print("Scanning a network you do not own or are not authorized to test")
+        print("may be illegal. Continue only if you are authorized.")
+        if not args.yes:
+            try:
+                confirm = input(
+                    "Type YES to confirm you are authorized to scan "
+                    "(Ctrl+C to abort): "
+                )
+            except (KeyboardInterrupt, EOFError):
+                print("\nAborted.")
+                return 130
+            if confirm.strip() != "YES":
+                print("Aborted.")
+                return 130
     
     # Create scanner instance
     scanner = NetworkScanner(
