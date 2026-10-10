@@ -5,6 +5,7 @@ Provides helpers for IP handling, logging, and output formatting.
 
 import logging
 import ipaddress
+import socket
 import sys
 from typing import List, Union
 from datetime import timedelta
@@ -227,3 +228,25 @@ def get_host_count(cidr: str) -> int:
         return network.num_addresses - 2 if network.num_addresses > 2 else network.num_addresses
     except ValueError:
         return 0
+
+
+def create_socket(host: str, sock_type: int) -> socket.socket:
+    """
+    Create a socket with the address family matching ``host``.
+
+    Uses getaddrinfo so IPv6 targets get AF_INET6 instead of silently
+    failing on an AF_INET socket (which reports every port closed).
+
+    Args:
+        host: Target hostname or IP address
+        sock_type: socket.SOCK_STREAM or socket.SOCK_DGRAM
+
+    Returns:
+        An unconnected socket of the right family
+    """
+    try:
+        infos = socket.getaddrinfo(host, None, type=sock_type)
+        family = infos[0][0] if infos else socket.AF_INET
+    except socket.gaierror:
+        family = socket.AF_INET
+    return socket.socket(family, sock_type)
