@@ -138,6 +138,11 @@ Examples:
         help="Skip the authorization confirmation prompt for non-private "
              "targets (only use on networks you own or are authorized to test)"
     )
+    parser.add_argument(
+        "--force",
+        action="store_true",
+        help="Overwrite the output file if it already exists"
+    )
     
     return parser.parse_args()
 
@@ -225,7 +230,7 @@ def main():
         
         # Save results if output file specified
         if args.output:
-            scanner.save_results(results, args.output, args.format)
+            scanner.save_results(results, args.output, args.format, args.force)
             logger.info(f"Results saved to {args.output}")
         
         return 0
