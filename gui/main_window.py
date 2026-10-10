@@ -87,12 +87,17 @@ class ScannerThread(QThread):
     def run(self):
         """Run the scan in background thread."""
         try:
+            def _on_progress(done: int, total: int):
+                pct = int(done / max(total, 1) * 100)
+                self.progress.emit(pct)
+
             scanner = NetworkScanner(
                 network=self.network,
                 threads=self.threads,
                 timeout=self.timeout,
                 logger=self.logger,
-                stop_event=self._stop_event
+                stop_event=self._stop_event,
+                progress_callback=_on_progress
             )
             scanner.ping_sweep = self.ping_sweep
             if self.aggressive:
@@ -661,6 +666,7 @@ class ShibaCuddlesGUI(QMainWindow):
         )
         self.scanner_thread.finished.connect(self.on_scan_finished)
         self.scanner_thread.error.connect(self.on_scan_error)
+        self.scanner_thread.progress.connect(self.progress_bar.setValue)
         self.scanner_thread.start()
 
     def stop_scan(self):
@@ -683,35 +689,17 @@ class ShibaCuddlesGUI(QMainWindow):
         self.progress_bar.setValue(100)
         self._log(f"Scan completed — {len(results)} host(s) found", "ok")
 
-        # Populate results table
-        self.results_table.setRowCount(len(results))
-        for row, result in enumerate(results):
-            ip = result.ip
-            alive = bool(result.alive)
-            ports = ", ".join(map(str, result.open_ports[:8]))
-            if len(result.open_ports) > 8:
-                ports += f" (+{len(result.open_ports) - 8} more)"
-            services = str(len(result.services)) if result.services else "0"
-            os_name = (result.os_info.get("name", "Unknown")
-                       if result.os_info else "Unknown")
-
-            ip_item = QTableWidgetItem(ip)
-            mono = QFont("Consolas", 10)
-            mono.setStyleHint(QFont.StyleHint.Monospace)
-            ip_item.setFont(mono)
-
-            status_item = QTableWidgetItem("● ALIVE" if alive else "○ DOWN")
-            status_item.setForeground(
-                QColor(_ACCENT) if alive else QColor(_TEXT_DIM))
-            font = status_item.font()
-            font.setBold(True)
-            status_item.setFont(font)
-
-            self.results_table.setItem(row, 0, ip_item)
-            self.results_table.setItem(row, 1, status_item)
-            self.results_table.setItem(row, 2, QTableWidgetItem(ports))
-            self.results_table.setItem(row, 3, QTableWidgetItem(services))
-            self.results_table.setItem(row, 4, QTableWidgetItem(os_name))
+        # Populate results table in batches so large scans stay responsive
+        # instead of freezing the UI building every row at once.
+        self.results_table.setRowCount(0)
+        batch_size = 50
+        for start in range(0, len(results), batch_size):
+            chunk = results[start:start + batch_size]
+            base = self.results_table.rowCount()
+            self.results_table.setRowCount(base + len(chunk))
+            for offset, result in enumerate(chunk):
+                self._fill_result_row(base + offset, result)
+            QApplication.processEvents()
 
         # Update statistics
         self._update_statistics(results)
@@ -721,6 +709,35 @@ class ShibaCuddlesGUI(QMainWindow):
         self.stop_button.setEnabled(False)
         self.statusBar().showMessage(
             f"Scan completed — {sum(1 for r in results if r.alive)} host(s) alive")
+
+    def _fill_result_row(self, row: int, result):
+        """Fill a single row of the results table."""
+        ip = result.ip
+        alive = bool(result.alive)
+        ports = ", ".join(map(str, result.open_ports[:8]))
+        if len(result.open_ports) > 8:
+            ports += f" (+{len(result.open_ports) - 8} more)"
+        services = str(len(result.services)) if result.services else "0"
+        os_name = (result.os_info.get("name", "Unknown")
+                   if result.os_info else "Unknown")
+
+        ip_item = QTableWidgetItem(ip)
+        mono = QFont("Consolas", 10)
+        mono.setStyleHint(QFont.StyleHint.Monospace)
+        ip_item.setFont(mono)
+
+        status_item = QTableWidgetItem("● ALIVE" if alive else "○ DOWN")
+        status_item.setForeground(
+            QColor(_ACCENT) if alive else QColor(_TEXT_DIM))
+        font = status_item.font()
+        font.setBold(True)
+        status_item.setFont(font)
+
+        self.results_table.setItem(row, 0, ip_item)
+        self.results_table.setItem(row, 1, status_item)
+        self.results_table.setItem(row, 2, QTableWidgetItem(ports))
+        self.results_table.setItem(row, 3, QTableWidgetItem(services))
+        self.results_table.setItem(row, 4, QTableWidgetItem(os_name))
 
     def on_scan_error(self, error: str):
         """Handle scan errors."""
