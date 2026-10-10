@@ -5,6 +5,27 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.1] - 2026-10-10
+
+### Security
+- NEW: wireless attack functions gated behind `authorized_targets.json`
+  scope file (SSID/BSSID allowlist, case-sensitive, no override);
+  config dir takes precedence over cwd; malformed scope fails closed
+- `deauth.py`: random WPA passphrase per run, `tempfile` instead of `/tmp`
+  paths, guaranteed teardown
+- Non-RFC1918 scan targets require explicit confirmation (CLI `--yes` / GUI dialog)
+- Target ranges over 65,536 addresses refused (was: `0.0.0.0/0` → OOM)
+- Results `--output` refuses overwrite without `--force`
+- Vulnerability DB labeled as demo data
+
+### Performance
+- Service detection, OS detection, and UDP scanning parallelized
+- Scan timeout floor 1.0 s → 0.2 s (device discovery keeps float precision)
+- GUI progress bar live per host; results table inserted in batches;
+  Stop now interrupts mid-host scans
+- IPv6 targets scanned correctly (were silently reported all-closed)
+- Discovery futures submitted in chunks; dead `scan_batch` removed
+
 ## [0.3.0] - 2026-09-19
 
 ### Changed
