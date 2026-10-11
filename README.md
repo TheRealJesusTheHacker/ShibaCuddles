@@ -518,7 +518,7 @@ cp authorized_targets.example.json authorized_targets.json
     address-family resolution, helpers
 - `gui/` — PyQt6 dashboard (`main_window.py`: header, config panel,
   results/statistics/log tabs, export, stop)
-- `tests/` — unit test suite (49 tests)
+- `tests/` — unit test suite (64 tests)
 - `authorized_targets.example.json` — scope-file template (copy to
   `authorized_targets.json`; gitignored)
 
@@ -527,7 +527,7 @@ cp authorized_targets.example.json authorized_targets.json
 ```bash
 pip install -r requirements-dev.txt
 
-# Run the test suite (49 tests)
+# Run the test suite (64 tests)
 python -m pytest tests/ -v
 
 # Format & lint (enforced in CI)
@@ -556,7 +556,8 @@ third-party GitHub Actions are pinned to commit SHAs.
 - Packet-level parsing in `analyze_traffic_patterns` (currently a
   capture stub returning empty breakdowns)
 - Wiring `UDPScanner` / `VulnerabilityScanner` into the CLI/GUI pipeline
-  (both exist as tested library classes today)
+  (both exist as library classes today; `UDPScanner` has test coverage,
+  `VulnerabilityScanner` is an untested demo class)
 - Custom scan profiles and scheduled scans
 
 ## 🔐 Security considerations

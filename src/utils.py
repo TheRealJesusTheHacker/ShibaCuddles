@@ -140,7 +140,7 @@ def print_banner():
     banner = r"""
     ╔═══════════════════════════════════════════════════════════════╗
     ║                   🐕 ShibaCuddles 🐕                          ║
-    ║              Advanced Network Scanner v1.0                    ║
+    ║              Advanced Network Scanner v0.3.1                  ║
     ║          High-Performance Parallel Scanning                   ║
     ╚═══════════════════════════════════════════════════════════════╝
     """
