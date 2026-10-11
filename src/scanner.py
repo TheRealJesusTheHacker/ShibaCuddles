@@ -5,18 +5,17 @@ Orchestrates network scanning operations with optimization and performance tunin
 
 import logging
 import threading
-from typing import List, Dict, Optional, Tuple, Callable
+from typing import List, Dict, Optional, Callable
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, asdict
 import time
 import ipaddress
-from collections import defaultdict
 
 from .device import DeviceDiscovery
 from .port_scanner import PortScanner
 from .service_detector import ServiceDetector
 from .results_handler import ResultsHandler
-from .utils import format_elapsed_time
+from .utils import format_elapsed_time, parse_port_spec
 
 
 @dataclass
@@ -126,6 +125,16 @@ class NetworkScanner:
         """Check whether a stop was requested via the stop event."""
         return self.stop_event.is_set()
 
+    def _report_progress(self, done: int, total: int) -> None:
+        """Invoke the progress callback, never letting it break the scan."""
+        cb = self.progress_callback
+        if cb is None:
+            return
+        try:
+            cb(done, total)
+        except Exception:
+            self.logger.debug("progress callback raised", exc_info=True)
+
     def scan(self, port_range: str) -> List[ScanResult]:
         """
         Execute comprehensive network scan.
@@ -216,6 +225,8 @@ class NetworkScanner:
     def _discover_devices(self, target_ips: List[str]) -> List[str]:
         """Discover alive devices using ICMP and ARP."""
         alive_ips = []
+        total = len(target_ips)
+        completed = 0
 
         # Submit in chunks so a /16 doesn't queue 65k futures (and ping
         # subprocesses) up front.
@@ -241,8 +252,47 @@ class NetworkScanner:
                             alive_ips.append(ip)
                     except Exception as e:
                         self.logger.debug(f"Error checking {ip}: {e}")
+                    completed += 1
+                    self._report_progress(completed, total)
 
         return sorted(alive_ips)
+
+    def _scan_ports(self, hosts: List[str], port_range: str) -> List[ScanResult]:
+        """Scan ports on each alive host and build ScanResults.
+
+        Hosts are scanned one at a time; PortScanner parallelizes the ports
+        within each host. (A host-level pool nested inside the port-level
+        pool would multiply thread counts: threads^2.) Progress is reported
+        per completed host via the progress callback.
+        """
+        try:
+            ports = parse_port_spec(port_range)
+        except ValueError as e:
+            self.logger.error(f"Invalid port specification: {e}")
+            return []
+        if not ports:
+            return []
+
+        total = len(hosts)
+        results: List[ScanResult] = []
+        for idx, host in enumerate(hosts, 1):
+            if self._should_stop():
+                self.logger.info("Port scan aborted by stop request")
+                break
+            t0 = time.time()
+            try:
+                open_ports = self.port_scanner.scan(host, port_range)
+            except Exception as e:
+                self.logger.debug(f"Port scan failed for {host}: {e}")
+                open_ports = []
+            results.append(ScanResult(
+                ip=host,
+                alive=True,
+                open_ports=open_ports,
+                scan_time=time.time() - t0,
+            ))
+            self._report_progress(idx, total)
+        return results
     def _map_parallel(self, func, results: List[ScanResult]) -> List[ScanResult]:
         """Apply func to each result in a thread pool, preserving order."""
         ordered: List[Optional[ScanResult]] = [None] * len(results)

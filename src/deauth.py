@@ -8,8 +8,7 @@ import logging
 import subprocess
 import platform
 import socket
-import struct
-from typing import List, Dict, Optional, Tuple
+from typing import List, Dict, Optional
 from dataclasses import dataclass
 import time
 import os
@@ -177,43 +176,84 @@ class WiFiDeauthenticator:
             duration: Scan duration in seconds
         
         Returns:
-            List of nearby networks with details
+            List of nearby networks with details (bssid, ssid, channel,
+            privacy, power). Empty if airodump-ng is missing or finds
+            nothing.
         """
         if self.system != "linux":
             self.logger.error("WiFi scanning is only supported on Linux")
             return []
-        
+
+        # Capture files go into a private temp dir -- never a predictable
+        # /tmp path. airodump-ng appends its own suffixes to the prefix.
+        scan_dir = tempfile.mkdtemp(prefix="shibacuddles_scan_")
+        scan_prefix = os.path.join(scan_dir, "scan")
         try:
-            networks = []
-            
-            # Capture files go into a private temp dir -- never a predictable
-            # /tmp path. airodump-ng appends its own suffixes to the prefix.
-            scan_dir = tempfile.mkdtemp(prefix="shibacuddles_scan_")
-            scan_prefix = os.path.join(scan_dir, "scan")
             try:
-                # Use airodump-ng to scan networks
-                result = subprocess.run(
+                # airodump-ng runs until killed; the timeout ending it is
+                # the normal path, not an error.
+                subprocess.run(
                     ["sudo", "airodump-ng", "-w", scan_prefix, "-o", "csv",
                      "--write-interval", str(duration), interface],
                     capture_output=True,
                     text=True,
                     timeout=duration + 5
                 )
+            except subprocess.TimeoutExpired:
+                pass  # expected: airodump-ng runs until we stop it
 
-                # Parse results
-                if result.returncode == 0:
-                    self.logger.info(f"WiFi scan complete")
-
-                return networks
-            finally:
-                shutil.rmtree(scan_dir, ignore_errors=True)
-        
-        except subprocess.TimeoutExpired:
-            self.logger.debug("WiFi scan timeout (expected)")
-            return []
+            networks = self._parse_airodump_csv(scan_dir)
+            self.logger.info(f"WiFi scan complete: {len(networks)} networks")
+            return networks
         except Exception as e:
             self.logger.error(f"Error scanning networks: {e}")
             return []
+        finally:
+            shutil.rmtree(scan_dir, ignore_errors=True)
+
+    @staticmethod
+    def _parse_airodump_csv(scan_dir: str) -> List[Dict]:
+        """Parse airodump-ng CSV capture files into network dicts.
+
+        Reads the access-point section (everything before the
+        "Station MAC" line). Best effort: ESSIDs containing commas shift
+        columns, so the SSID is rebuilt from the trailing fields.
+        """
+        networks = []
+        try:
+            names = sorted(os.listdir(scan_dir))
+        except OSError:
+            return networks
+        for name in names:
+            if not name.endswith(".csv"):
+                continue
+            path = os.path.join(scan_dir, name)
+            try:
+                with open(path, "r", encoding="utf-8", errors="ignore") as fh:
+                    for line in fh:
+                        line = line.strip()
+                        if not line:
+                            continue
+                        if line.startswith("Station MAC"):
+                            break  # end of the access-point section
+                        if line.startswith("BSSID"):
+                            continue  # header row
+                        parts = [p.strip() for p in line.split(",")]
+                        if len(parts) < 14 or not parts[0]:
+                            continue
+                        # Rebuild the SSID from the trailing fields: an
+                        # ESSID containing commas shifts the columns.
+                        ssid = ",".join(parts[13:]).rstrip(",").strip()
+                        networks.append({
+                            "bssid": parts[0],
+                            "channel": parts[3],
+                            "privacy": parts[5],
+                            "power": parts[8],
+                            "ssid": ssid,
+                        })
+            except OSError:
+                continue
+        return networks
     
     def deauthenticate_device(self, target: DeauthTarget) -> bool:
         """
@@ -468,33 +508,47 @@ class NetworkInterruptor:
     def analyze_traffic_patterns(self, interface: str, duration: int = 30) -> Dict:
         """
         Analyze network traffic patterns.
-        
+
         Args:
             interface: Interface to sniff
             duration: Capture duration in seconds
-        
+
         Returns:
-            Dictionary with traffic statistics
+            Dictionary with capture metadata. NOTE: packet-level analysis
+            is not implemented yet -- protocol breakdowns are empty and
+            total_packets is 0. The capture itself runs; only the parsing
+            is a stub.
         """
+        # Private temp file, never a predictable /tmp path: tcpdump runs
+        # under sudo, and a pre-planted symlink at a fixed path would let
+        # another user redirect the capture output.
+        fd, pcap_path = tempfile.mkstemp(
+            prefix="shibacuddles_traffic_", suffix=".pcap")
+        os.close(fd)
         try:
             # Use tcpdump to capture traffic
-            result = subprocess.run(
+            subprocess.run(
                 ["sudo", "tcpdump", "-i", interface, "-c", "1000",
-                 "-w", "/tmp/traffic.pcap"],
+                 "-w", pcap_path],
                 capture_output=True,
                 timeout=duration
             )
-            
-            # Parse pcap file
+
+            # Packet parsing not implemented yet (see docstring).
             stats = {
                 "total_packets": 0,
                 "protocols": {},
                 "top_ips": [],
-                "duration": duration
+                "duration": duration,
             }
-            
+
             return stats
-        
+
         except Exception as e:
             self.logger.error(f"Error analyzing traffic: {e}")
             return {}
+        finally:
+            try:
+                os.unlink(pcap_path)
+            except OSError:
+                pass

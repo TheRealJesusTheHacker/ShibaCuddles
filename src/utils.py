@@ -7,6 +7,7 @@ import logging
 import ipaddress
 import socket
 import sys
+from functools import lru_cache
 from typing import List, Union
 from datetime import timedelta
 
@@ -230,12 +231,27 @@ def get_host_count(cidr: str) -> int:
         return 0
 
 
+@lru_cache(maxsize=1024)
+def _resolve_family(host: str, sock_type: int) -> int:
+    """Address family for ``host``, cached.
+
+    getaddrinfo can hit DNS for hostnames; without caching, every port
+    probe pays for a fresh resolution. lru_cache is thread-safe.
+    """
+    try:
+        infos = socket.getaddrinfo(host, None, type=sock_type)
+        return infos[0][0] if infos else socket.AF_INET
+    except socket.gaierror:
+        return socket.AF_INET
+
+
 def create_socket(host: str, sock_type: int) -> socket.socket:
     """
     Create a socket with the address family matching ``host``.
 
     Uses getaddrinfo so IPv6 targets get AF_INET6 instead of silently
     failing on an AF_INET socket (which reports every port closed).
+    The family lookup is cached per (host, type).
 
     Args:
         host: Target hostname or IP address
@@ -244,9 +260,4 @@ def create_socket(host: str, sock_type: int) -> socket.socket:
     Returns:
         An unconnected socket of the right family
     """
-    try:
-        infos = socket.getaddrinfo(host, None, type=sock_type)
-        family = infos[0][0] if infos else socket.AF_INET
-    except socket.gaierror:
-        family = socket.AF_INET
-    return socket.socket(family, sock_type)
+    return socket.socket(_resolve_family(host, sock_type), sock_type)
