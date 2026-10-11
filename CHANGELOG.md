@@ -20,6 +20,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   and `WiFiDeauthenticator.get_wireless_interfaces` is a real reachable
   method again (iwconfig parsing, failure and non-Linux paths) — suite now
   64 tests
+- 8 new unit tests from the Windows-correctness audit: `print_banner`
+  ASCII fallback on non-UTF-8 consoles, explicit UTF-8 exports,
+  case-insensitive export extension detection, and airmon-ng/aireplay-ng
+  detection via `shutil.which` — suite now 72 tests
 - CI `lint` job: `black --check` + `ruff check` on every push/PR;
   `pyproject.toml` pins the ruff rule set (E/F/W/I) and black config
 - Issue templates (bug report, feature request) and a PR template with an
@@ -58,6 +62,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Restored `WiFiDeauthenticator.get_wireless_interfaces` as a real method —
   it was unreachable dead code (defined after a `return` in a
   module-level function), so any call raised `AttributeError`
+- `utils.print_banner` falls back to ASCII on `UnicodeEncodeError` — the
+  CLI/GUI no longer crash at startup on legacy Windows consoles
+  (cp437/cp1252 can't render box-drawing glyphs or the Shiba emoji)
+- Exports (JSON/CSV/XML/TXT) written as explicit UTF-8; Windows' locale
+  codepage (cp1252) no longer raises `UnicodeEncodeError` on non-ASCII
+  hostnames/banners and fails the whole export
+- Export extension auto-detect is case-insensitive (`.CSV` works)
+- airmon-ng/aireplay-ng detected via `shutil.which` instead of shelling
+  out to the Unix-only `which` binary — this also fixes the tools being
+  reported "found" whenever the `which` binary merely existed
+- GUI export appends the chosen format's extension when the user types a
+  bare filename (Windows needs extensions for file associations)
 
 ## [0.3.1] - 2026-10-10
 
