@@ -430,10 +430,23 @@ class WiFiDeauthenticator:
             interface: Network interface
             ssid: SSID name
             channel: WiFi channel
+            passphrase: WPA2 passphrase
 
         Returns:
             Configuration string
+
+        Raises:
+            ValueError: If any value could break out of its config line
+                (CR/LF injection) or the channel is not a valid integer.
         """
+        interface = _require_single_line(interface, "interface")
+        ssid = _require_single_line(ssid, "ssid")
+        try:
+            channel = int(channel)
+        except (TypeError, ValueError):
+            raise ValueError(f"channel must be an integer, got {channel!r}")
+        if not 1 <= channel <= 196:
+            raise ValueError(f"channel out of WiFi range: {channel}")
         return f"""
 interface={interface}
 ssid={ssid}
@@ -444,6 +457,20 @@ wpa_passphrase={passphrase}
 wpa_key_mgmt=WPA-PSK
 wpa_pairwise=CCMP
 """
+
+
+def _require_single_line(value: str, name: str) -> str:
+    """Reject CR/LF in a hostapd.conf value.
+
+    A newline inside ``interface`` or ``ssid`` would inject extra hostapd
+    directives into the generated config file. SSIDs can legally contain
+    newline bytes (up to 32 arbitrary octets), so this raises instead of
+    stripping: stripping would silently change the SSID under test.
+    """
+    text = str(value)
+    if "\r" in text or "\n" in text:
+        raise ValueError(f"{name} must not contain CR or LF characters")
+    return text
 
     def get_wireless_interfaces(self) -> List[str]:
         """

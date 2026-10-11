@@ -28,6 +28,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   ("Cafe, Free, WiFi" no longer comes back as "Cafe,Free,WiFi")
 
 ### Fixed
+- `create_rogue_ap` hostapd config generation rejects CR/LF in interface/SSID
+  (config-line injection) and requires an integer WiFi channel (1-196);
+  6 new unit tests in `tests/test_hostapd_config.py`
+- `requirements.txt` bounds `PyQt6-Charts` to `<7.0.0` so a future major
+  release can't silently swap in under the pinned `PyQt6==6.11.0`
 - Restored the missing `NetworkScanner._scan_ports` method — every scan
   crashed without it
 - Progress callbacks wired into the scan pipeline; a callback that raises
