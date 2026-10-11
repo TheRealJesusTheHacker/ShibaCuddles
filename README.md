@@ -557,6 +557,11 @@ third-party GitHub Actions are pinned to commit SHAs.
 - Pushing a `v*` tag triggers the Release workflow: builds the Windows
   `.exe` and Linux binary, generates `SHA256SUMS-*.txt`, attaches
   signed build-provenance attestations, and publishes the GitHub release.
+  Publishing that release then fires the Publish-to-PyPI workflow
+  (`.github/workflows/publish-pypi.yml`, on `release: published`), which
+  builds the sdist/wheel and uploads to PyPI via OIDC trusted publishing
+  — so tagging `v*` effectively auto-publishes to PyPI. Disable or detach
+  `publish-pypi.yml` before tagging if the release should NOT go to PyPI.
 
 ## 🗺️ Roadmap (planned — not yet implemented)
 
