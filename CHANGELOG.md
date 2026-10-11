@@ -5,6 +5,38 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+- 15 new unit tests covering the restored scan orchestration:
+  `NetworkScanner._scan_ports` (per-host results, stop-event abort,
+  graceful per-host failure, invalid port specs), progress-callback wiring
+  (including a callback that raises), and the airodump-ng CSV parser
+  (AP section, station-section cutoff, comma-in-SSID handling, malformed
+  rows) — suite now 49 tests
+- CI `lint` job: `black --check` + `ruff check` on every push/PR;
+  `pyproject.toml` pins the ruff rule set (E/F/W/I) and black config
+- Issue templates (bug report, feature request) and a PR template with an
+  authorized-use checklist under `.github/`
+
+### Changed
+- All GitHub Actions pinned to commit SHAs (ci, release, CodeQL, PyPI
+  publish) with version comments, per the supply-chain hardening standard
+- `LICENSE` now carries the standard "MIT License" header
+- Source formatted with black; dead imports/variables removed (ruff-clean)
+- airodump-ng CSV parser preserves spaces inside SSIDs
+  ("Cafe, Free, WiFi" no longer comes back as "Cafe,Free,WiFi")
+
+### Fixed
+- Restored the missing `NetworkScanner._scan_ports` method — every scan
+  crashed without it
+- Progress callbacks wired into the scan pipeline; a callback that raises
+  can no longer break the scan
+- DNS resolution cached per (host, socket type) so port scans no longer
+  pay for a fresh `getaddrinfo` on every port
+- Traffic capture uses a private `tempfile` path instead of a predictable
+  `/tmp/traffic.pcap` (symlink-planting risk under sudo)
+
 ## [0.3.1] - 2026-10-10
 
 ### Security
