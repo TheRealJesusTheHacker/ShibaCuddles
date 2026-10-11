@@ -4,30 +4,31 @@ ShibaCuddles GUI Launcher
 Starts the graphical interface for the network scanner.
 """
 
-import sys
 import logging
+import sys
 from pathlib import Path
 
 # Add src to path
 sys.path.insert(0, str(Path(__file__).parent))
 
-from src.utils import setup_logging, print_banner
+from src.utils import print_banner, setup_logging
+
 
 def main():
     """Launch GUI application."""
     print_banner()
-    
+
     # Setup logging
     logger = setup_logging(logging.INFO)
     logger.info("Starting ShibaCuddles GUI")
-    
+
     try:
         from gui.main_window import main as gui_main
+
         gui_main()
     except ImportError:
         logger.error(
-            "PyQt6 not installed. Install with:\n"
-            "  pip install PyQt6 PyQt6-Charts"
+            "PyQt6 not installed. Install with:\n" "  pip install PyQt6 PyQt6-Charts"
         )
         sys.exit(1)
     except SystemExit as e:
@@ -43,6 +44,7 @@ def main():
     except Exception as e:
         logger.error(f"GUI startup failed: {e}")
         sys.exit(1)
+
 
 if __name__ == "__main__":
     main()

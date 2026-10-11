@@ -5,9 +5,9 @@ Tests the real API: Device dataclass and DeviceDiscovery.
 """
 
 import unittest
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
 
-from src.device import Device, DeviceDiscovery, ARPScanner
+from src.device import ARPScanner, Device, DeviceDiscovery
 
 LINUX_ARP_SAMPLE = """Address                  HWtype  HWaddress           Flags Mask            Iface
 192.168.1.1              ether   00:11:22:33:44:55   C                     eth0
@@ -36,12 +36,13 @@ class TestDevice(unittest.TestCase):
         device = Device("192.168.1.1")
         self.assertEqual(
             repr(device),
-            "Device(ip='192.168.1.1', mac=None, hostname=None, is_alive=True)"
+            "Device(ip='192.168.1.1', mac=None, hostname=None, is_alive=True)",
         )
 
     def test_device_full(self):
-        device = Device(ip="10.0.0.5", mac="00:11:22:33:44:55",
-                        hostname="router.lan", is_alive=True)
+        device = Device(
+            ip="10.0.0.5", mac="00:11:22:33:44:55", hostname="router.lan", is_alive=True
+        )
         self.assertEqual(device.mac, "00:11:22:33:44:55")
         self.assertEqual(device.hostname, "router.lan")
 
@@ -75,8 +76,7 @@ class TestGetMacAddress(unittest.TestCase):
         self.discovery.system = "linux"
         mock_run.return_value = MagicMock(stdout=LINUX_ARP_SAMPLE)
         self.assertEqual(
-            self.discovery.get_mac_address("192.168.1.1"),
-            "00:11:22:33:44:55"
+            self.discovery.get_mac_address("192.168.1.1"), "00:11:22:33:44:55"
         )
 
     @patch("src.device.subprocess.run")
@@ -85,18 +85,17 @@ class TestGetMacAddress(unittest.TestCase):
         mock_run.return_value = MagicMock(stdout=WINDOWS_ARP_SAMPLE)
         # Dashes normalized to colons
         self.assertEqual(
-            self.discovery.get_mac_address("192.168.1.1"),
-            "00:11:22:33:44:55"
+            self.discovery.get_mac_address("192.168.1.1"), "00:11:22:33:44:55"
         )
 
     @patch("src.device.subprocess.run")
     def test_uppercase_mac_normalized(self, mock_run):
         self.discovery.system = "linux"
         mock_run.return_value = MagicMock(
-            stdout="192.168.1.1 ether AA:BB:CC:DD:EE:FF C eth0\n")
+            stdout="192.168.1.1 ether AA:BB:CC:DD:EE:FF C eth0\n"
+        )
         self.assertEqual(
-            self.discovery.get_mac_address("192.168.1.1"),
-            "aa:bb:cc:dd:ee:ff"
+            self.discovery.get_mac_address("192.168.1.1"), "aa:bb:cc:dd:ee:ff"
         )
 
     @patch("src.device.subprocess.run")
@@ -124,13 +123,14 @@ class TestDiscover(unittest.TestCase):
     @patch.object(DeviceDiscovery, "is_alive", return_value=False)
     def test_discover_none_alive(self, mock_alive):
         devices = self.discovery.discover(
-            ["192.168.1.1", "192.168.1.2"], resolve_hostname=False)
+            ["192.168.1.1", "192.168.1.2"], resolve_hostname=False
+        )
         self.assertEqual(devices, [])
 
     def test_discover_subnet_invalid(self):
         self.assertEqual(
-            self.discovery.discover_subnet("not-a-network",
-                                           resolve_hostname=False), [])
+            self.discovery.discover_subnet("not-a-network", resolve_hostname=False), []
+        )
 
 
 class TestARPScanner(unittest.TestCase):

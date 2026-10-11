@@ -3,20 +3,20 @@ High-performance port scanner module.
 Implements TCP connection scanning with threading and optimization.
 """
 
+import logging
 import socket
 import threading
-import logging
 import time
-from typing import List, Dict, Set, Optional
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from queue import Queue
+from typing import List, Optional
+
 from .utils import create_socket
 
 
 class PortScanner:
     """
     High-performance TCP port scanner with multi-threading support.
-    
+
     Features:
     - Multi-threaded scanning for speed
     - Connection pooling
@@ -24,18 +24,18 @@ class PortScanner:
     - Rate limiting
     - Service banner grabbing
     """
-    
+
     def __init__(
         self,
         threads: int = 10,
         timeout: float = 5.0,
         rate_limit: float = 0.0,
         logger: logging.Logger = None,
-        stop_event: Optional[threading.Event] = None
+        stop_event: Optional[threading.Event] = None,
     ):
         """
         Initialize port scanner.
-        
+
         Args:
             threads: Number of worker threads
             timeout: Socket timeout in seconds
@@ -54,34 +54,33 @@ class PortScanner:
     def _should_stop(self) -> bool:
         """Check whether a stop was requested via the stop event."""
         return self.stop_event.is_set()
-    
+
     def scan(self, host: str, port_spec: str) -> List[int]:
         """
         Scan ports on target host.
-        
+
         Args:
             host: Target IP address
             port_spec: Port specification (e.g., "1-1024" or "22,80,443")
-        
+
         Returns:
             List of open ports
         """
         from .utils import parse_port_spec
-        
+
         try:
             ports = parse_port_spec(port_spec)
         except ValueError as e:
             self.logger.error(f"Invalid port specification: {e}")
             return []
-        
+
         open_ports = []
-        
+
         with ThreadPoolExecutor(max_workers=self.threads) as executor:
             futures = {
-                executor.submit(self._check_port, host, port): port
-                for port in ports
+                executor.submit(self._check_port, host, port): port for port in ports
             }
-            
+
             for future in as_completed(futures):
                 if self._should_stop():
                     for f in futures:
@@ -96,15 +95,15 @@ class PortScanner:
                     self.logger.debug(f"Error scanning {host}:{port}: {e}")
 
         return sorted(open_ports)
-    
+
     def _check_port(self, host: str, port: int) -> bool:
         """
         Check if a single port is open.
-        
+
         Args:
             host: Target IP address
             port: Port number
-        
+
         Returns:
             True if port is open, False otherwise
         """
@@ -134,16 +133,15 @@ class PortScanner:
                     sock.close()
                 except Exception:
                     pass
-    
 
     def grab_banner(self, host: str, port: int) -> str:
         """
         Attempt to grab service banner from open port.
-        
+
         Args:
             host: Target IP address
             port: Port number
-        
+
         Returns:
             Banner string or empty string if failed
         """
@@ -178,7 +176,7 @@ class UDPScanner:
         timeout: float = 3.0,
         threads: int = 20,
         logger: logging.Logger = None,
-        stop_event: Optional[threading.Event] = None
+        stop_event: Optional[threading.Event] = None,
     ):
         """
         Initialize UDP scanner.

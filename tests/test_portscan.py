@@ -6,7 +6,7 @@ Tests the real API: PortScanner (src/port_scanner.py).
 
 import socket
 import unittest
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
 
 from src.port_scanner import PortScanner, UDPScanner
 
@@ -91,8 +91,7 @@ class TestGrabBanner(unittest.TestCase):
         mock_socket_class.return_value = mock_socket
 
         self.assertEqual(
-            self.scanner.grab_banner("192.168.1.1", 22),
-            "SSH-2.0-OpenSSH_8.9"
+            self.scanner.grab_banner("192.168.1.1", 22), "SSH-2.0-OpenSSH_8.9"
         )
         mock_socket.close.assert_called()
 

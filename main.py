@@ -2,19 +2,21 @@
 """
 ShibaCuddles - Advanced Network Scanner
 A comprehensive, high-performance network scanning tool written in Python.
-Supports device discovery, port scanning, service detection, and vulnerability assessment.
+It supports device discovery, port scanning, service detection, and
+vulnerability assessment.
 """
 
 import argparse
-import sys
 import logging
+import sys
 from pathlib import Path
 
 # Add src directory to path
 sys.path.insert(0, str(Path(__file__).parent))
 
 from src.scanner import NetworkScanner
-from src.utils import setup_logging, validate_network, print_banner
+from src.utils import print_banner, setup_logging, validate_network
+
 
 def parse_arguments():
     """Parse and validate command-line arguments."""
@@ -37,119 +39,128 @@ Examples:
 
   # Parallel scanning with 20 threads
   python main.py 192.168.1.0/24 --threads 20 --timeout 3
-        """
+        """,
     )
-    
+
     # Required arguments
-    parser.add_argument("network", help="Target network in CIDR notation (e.g., 192.168.1.0/24)")
-    
+    parser.add_argument(
+        "network", help="Target network in CIDR notation (e.g., 192.168.1.0/24)"
+    )
+
     # Scanning options
     parser.add_argument(
-        "--ports", "-p",
+        "--ports",
+        "-p",
         type=str,
         default="1-1024",
-        help="Ports to scan: range (1-1024) or list (22,80,443) [default: 1-1024]"
+        help="Ports to scan: range (1-1024) or list (22,80,443) [default: 1-1024]",
     )
     parser.add_argument(
-        "--threads", "-t",
+        "--threads",
+        "-t",
         type=int,
         default=10,
-        help="Number of threads for parallel scanning [default: 10]"
+        help="Number of threads for parallel scanning [default: 10]",
     )
     parser.add_argument(
         "--timeout",
         type=float,
         default=5.0,
-        help="Connection timeout in seconds [default: 5.0]"
+        help="Connection timeout in seconds [default: 5.0]",
     )
     parser.add_argument(
         "--rate-limit",
         type=float,
         default=0.0,
-        help="Delay between scans in seconds (0 for no limit) [default: 0.0]"
+        help="Delay between scans in seconds (0 for no limit) [default: 0.0]",
     )
-    
+
     # Feature flags
     parser.add_argument(
-        "--ping-sweep", "-ps",
+        "--ping-sweep",
+        "-ps",
         action="store_true",
-        help="Enable ICMP ping sweep for device discovery (on by default; this flag is accepted for explicitness)"
+        help=(
+            "Enable ICMP ping sweep for device discovery "
+            "(on by default; this flag is accepted for explicitness)"
+        ),
     )
     parser.add_argument(
-        "--service-detection", "-sd",
+        "--service-detection",
+        "-sd",
         action="store_true",
-        help="Enable service version detection"
+        help="Enable service version detection",
     )
     parser.add_argument(
-        "--os-detection", "-os",
-        action="store_true",
-        help="Enable OS fingerprinting"
+        "--os-detection", "-os", action="store_true", help="Enable OS fingerprinting"
     )
     parser.add_argument(
-        "--aggressive", "-A",
+        "--aggressive",
+        "-A",
         action="store_true",
-        help="Enable aggressive scanning (service + OS detection)"
+        help="Enable aggressive scanning (service + OS detection)",
     )
     parser.add_argument(
-        "--no-ping",
-        action="store_true",
-        help="Skip ping sweep, scan all hosts"
+        "--no-ping", action="store_true", help="Skip ping sweep, scan all hosts"
     )
-    
+
     # Output options
     parser.add_argument(
-        "--output", "-o",
+        "--output",
+        "-o",
         type=str,
-        help="Output file path (auto-detects format from extension)"
+        help="Output file path (auto-detects format from extension)",
     )
     parser.add_argument(
-        "--format", "-f",
+        "--format",
+        "-f",
         choices=["json", "csv", "xml", "txt"],
         default="json",
-        help="Output format [default: json]"
+        help="Output format [default: json]",
     )
     parser.add_argument(
-        "--verbose", "-v",
+        "--verbose",
+        "-v",
         action="count",
         default=0,
-        help="Verbose output (use -vv for extra verbosity)"
+        help="Verbose output (use -vv for extra verbosity)",
     )
     parser.add_argument(
-        "--quiet", "-q",
-        action="store_true",
-        help="Suppress all output except results"
+        "--quiet", "-q", action="store_true", help="Suppress all output except results"
     )
-    
+
     # Performance options
     parser.add_argument(
         "--batch-size",
         type=int,
         default=50,
-        help="Batch size for processing results [default: 50]"
+        help="Batch size for processing results [default: 50]",
     )
     parser.add_argument(
         "--skip-broadcast",
         action="store_true",
-        help="Skip broadcast and network addresses"
+        help="Skip broadcast and network addresses",
     )
     parser.add_argument(
-        "--yes", "-y",
+        "--yes",
+        "-y",
         action="store_true",
         help="Skip the authorization confirmation prompt for non-private "
-             "targets (only use on networks you own or are authorized to test)"
+        "targets (only use on networks you own or are authorized to test)",
     )
     parser.add_argument(
         "--force",
         action="store_true",
-        help="Overwrite the output file if it already exists"
+        help="Overwrite the output file if it already exists",
     )
-    
+
     return parser.parse_args()
 
 
 def _is_private_target(network: str) -> bool:
     """Return True if the target network is private (RFC1918) address space."""
     import ipaddress
+
     try:
         return ipaddress.ip_network(network, strict=False).is_private
     except ValueError:
@@ -160,7 +171,7 @@ def main():
     """Main entry point."""
     print_banner()
     args = parse_arguments()
-    
+
     # Setup logging
     log_level = logging.WARNING
     if args.quiet:
@@ -169,9 +180,9 @@ def main():
         log_level = logging.INFO
     elif args.verbose >= 2:
         log_level = logging.DEBUG
-    
+
     logger = setup_logging(log_level)
-    
+
     # Validate network input
     if not validate_network(args.network):
         logger.error(f"Invalid network: {args.network}")
@@ -195,7 +206,7 @@ def main():
             if confirm.strip() != "YES":
                 print("Aborted.")
                 return 130
-    
+
     # Create scanner instance
     scanner = NetworkScanner(
         network=args.network,
@@ -204,9 +215,9 @@ def main():
         rate_limit=args.rate_limit,
         batch_size=args.batch_size,
         skip_broadcast=args.skip_broadcast,
-        logger=logger
+        logger=logger,
     )
-    
+
     # Configure scanner features
     if args.aggressive:
         scanner.enable_service_detection = True
@@ -214,27 +225,27 @@ def main():
     else:
         scanner.enable_service_detection = args.service_detection
         scanner.enable_os_detection = args.os_detection
-    
+
     # Ping sweep is ON by default; --no-ping disables it.
     # (--ping-sweep is accepted for explicitness but is a no-op.)
     scanner.ping_sweep = not args.no_ping
-    
+
     try:
         # Run scan
         logger.info(f"Starting scan on {args.network}")
         results = scanner.scan(args.ports)
-        
+
         # Display results
         if not args.quiet:
             scanner.print_results(results)
-        
+
         # Save results if output file specified
         if args.output:
             scanner.save_results(results, args.output, args.format, args.force)
             logger.info(f"Results saved to {args.output}")
-        
+
         return 0
-        
+
     except KeyboardInterrupt:
         logger.warning("Scan interrupted by user")
         return 130

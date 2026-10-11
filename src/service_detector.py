@@ -4,18 +4,19 @@ Identifies services and their versions on discovered hosts.
 """
 
 import logging
-import socket
 import re
-from .utils import create_socket
+import socket
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from typing import Dict, Optional, List
+from typing import Dict, List, Optional
+
+from .utils import create_socket
 
 
 class ServiceDetector:
     """
     Detects services and their versions on open ports.
     """
-    
+
     # Common service signatures
     SERVICE_SIGNATURES = {
         22: {"name": "SSH", "protocol": "tcp"},
@@ -37,7 +38,7 @@ class ServiceDetector:
         8443: {"name": "HTTPS-Alt", "protocol": "tcp"},
         27017: {"name": "MongoDB", "protocol": "tcp"},
     }
-    
+
     # Version pattern detection
     VERSION_PATTERNS = {
         "SSH": re.compile(r"OpenSSH[_\s]+([0-9.]+)", re.IGNORECASE),
@@ -45,18 +46,18 @@ class ServiceDetector:
         "Apache": re.compile(r"Apache[/\s]+([0-9.]+)", re.IGNORECASE),
         "Nginx": re.compile(r"nginx[/\s]+([0-9.]+)", re.IGNORECASE),
     }
-    
+
     def __init__(self, timeout: float = 5.0, logger: logging.Logger = None):
         """
         Initialize service detector.
-        
+
         Args:
             timeout: Connection timeout in seconds
             logger: Logger instance
         """
         self.timeout = max(0.5, timeout)
         self.logger = logger or logging.getLogger(__name__)
-    
+
     def detect(self, host: str, ports: List[int]) -> Dict[int, Dict]:
         """
         Detect services on open ports.
@@ -78,8 +79,7 @@ class ServiceDetector:
         # detect_service is thread-safe (locals only, read-only class data).
         with ThreadPoolExecutor(max_workers=min(20, len(ports))) as executor:
             future_to_port = {
-                executor.submit(self.detect_service, host, port): port
-                for port in ports
+                executor.submit(self.detect_service, host, port): port for port in ports
             }
             for future in as_completed(future_to_port):
                 port = future_to_port[future]
@@ -92,46 +92,49 @@ class ServiceDetector:
                     services[port] = service_info
 
         return services
+
     def detect_service(self, host: str, port: int) -> Optional[Dict]:
         """
         Detect service on a single port.
-        
+
         Args:
             host: Target IP address
             port: Port number
-        
+
         Returns:
             Dictionary with service information or None
         """
         try:
             # Try banner grabbing
             banner = self._grab_banner(host, port)
-            
+
             if banner:
                 # Parse banner
                 service_info = self._parse_banner(banner, port)
-                self.logger.debug(f"{host}:{port} -> {service_info.get('name', 'Unknown')}")
+                self.logger.debug(
+                    f"{host}:{port} -> {service_info.get('name', 'Unknown')}"
+                )
                 return service_info
-            
+
             # Fallback to port-based detection
             if port in self.SERVICE_SIGNATURES:
                 return self.SERVICE_SIGNATURES[port].copy()
-            
+
             return None
-        
+
         except Exception as e:
             self.logger.debug(f"Service detection on {host}:{port} failed: {e}")
             return None
-    
+
     def _grab_banner(self, host: str, port: int, max_len: int = 1024) -> Optional[str]:
         """
         Grab service banner from port.
-        
+
         Args:
             host: Target IP address
             port: Port number
             max_len: Maximum banner length to retrieve
-        
+
         Returns:
             Banner string or None
         """
@@ -169,27 +172,27 @@ class ServiceDetector:
                     sock.close()
                 except Exception:
                     pass
-    
+
     def _parse_banner(self, banner: str, port: int) -> Dict:
         """
         Parse banner to extract service information.
-        
+
         Args:
             banner: Service banner string
             port: Port number
-        
+
         Returns:
             Dictionary with parsed service info
         """
         service_info = {"banner": banner[:100]}  # Store first 100 chars
-        
+
         # Get service name from port
         if port in self.SERVICE_SIGNATURES:
             service_info.update(self.SERVICE_SIGNATURES[port])
         else:
             service_info["name"] = "Unknown"
             service_info["protocol"] = "tcp"
-        
+
         # Try to extract version
         for service_name, pattern in self.VERSION_PATTERNS.items():
             match = pattern.search(banner)
@@ -197,16 +200,16 @@ class ServiceDetector:
                 service_info["version"] = match.group(1)
                 service_info["name"] = service_name
                 break
-        
+
         return service_info
-    
+
     def detect_os(self, host: str) -> Dict:
         """
         Perform basic OS fingerprinting.
-        
+
         Args:
             host: Target IP address
-        
+
         Returns:
             Dictionary with OS information
         """
@@ -215,77 +218,68 @@ class ServiceDetector:
             ttl = self._get_ttl(host)
             os_info = self._guess_os_from_ttl(ttl)
             return os_info
-        
+
         except Exception as e:
             self.logger.debug(f"OS detection failed for {host}: {e}")
-            return {
-                "name": "Unknown",
-                "confidence": 0,
-                "method": "failed"
-            }
-    
+            return {"name": "Unknown", "confidence": 0, "method": "failed"}
+
     def _get_ttl(self, host: str) -> Optional[int]:
         """
         Get TTL value from ICMP echo reply.
-        
+
         Args:
             host: Target IP address
-        
+
         Returns:
             TTL value or None
         """
         try:
-            from scapy.all import IP, ICMP, sr1
-            
+            from scapy.all import ICMP, IP, sr1
+
             packet = IP(dst=host) / ICMP()
             reply = sr1(packet, timeout=self.timeout, verbose=False)
-            
+
             if reply:
                 return reply.ttl
-        
+
         except ImportError:
             self.logger.debug("Scapy not available for TTL detection")
         except Exception as e:
             self.logger.debug(f"TTL detection failed: {e}")
-        
+
         return None
-    
+
     def _guess_os_from_ttl(self, ttl: Optional[int]) -> Dict:
         """
         Guess OS based on TTL value.
-        
+
         Args:
             ttl: TTL value from ICMP reply
-        
+
         Returns:
             Dictionary with OS guess
         """
         if ttl is None:
             return {"name": "Unknown", "confidence": 0, "method": "ttl"}
-        
+
         os_guesses = {
             128: ("Windows", 90),
             64: ("Linux/Unix", 85),
             255: ("Cisco/Network Device", 80),
             32: ("Windows/Old", 70),
         }
-        
+
         closest = min(os_guesses.keys(), key=lambda x: abs(x - ttl))
         os_name, confidence = os_guesses[closest]
-        
+
         if ttl == closest:
             confidence = 95
         elif abs(ttl - closest) <= 10:
             confidence = 75
         else:
             confidence = 50
-        
-        return {
-            "name": os_name,
-            "ttl": ttl,
-            "confidence": confidence,
-            "method": "ttl"
-        }
+
+        return {"name": os_name, "ttl": ttl, "confidence": confidence, "method": "ttl"}
 
 
 class VulnerabilityScanner:
@@ -310,23 +304,23 @@ class VulnerabilityScanner:
             "2.4.49": "CVE-2021-41773 - Remote code execution",
         },
     }
-    
+
     def __init__(self, logger: logging.Logger = None):
         """Initialize vulnerability scanner."""
         self.logger = logger or logging.getLogger(__name__)
-    
+
     def scan(self, services: Dict[int, Dict]) -> Dict:
         """
         Scan services for known vulnerabilities.
-        
+
         Args:
             services: Dictionary of detected services
-        
+
         Returns:
             Dictionary with vulnerability findings
         """
         vulnerabilities = {}
-        
+
         for port, service_info in services.items():
             service_name = service_info.get("name", "")
             version = service_info.get("version", "")
@@ -334,8 +328,9 @@ class VulnerabilityScanner:
             known_versions = self.VULNERABILITIES.get(service_name, {})
             for known_version, vuln in known_versions.items():
                 # Tolerant match: detected "7.0p1" matches known "7.0".
-                if version and (version == known_version
-                                or version.startswith(known_version)):
+                if version and (
+                    version == known_version or version.startswith(known_version)
+                ):
                     vulnerabilities[f"{service_name}-{version}"] = vuln
                     break
 

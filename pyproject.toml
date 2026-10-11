@@ -1,0 +1,24 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.black]
+# Black is the formatter of record. `black --check` runs in CI.
+
+[tool.ruff]
+# Ruff is the linter of record. Keep the rule set conservative: the goal
+# is catching real bugs (unused imports/variables, syntax-level issues),
+# not churning the codebase for style points.
+line-length = 88
+target-version = "py38"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I"]
+
+[tool.ruff.lint.per-file-ignores]
+# Test fixtures (sample arp/airodump output) intentionally contain
+# over-length lines to stay realistic.
+"tests/*" = ["E501"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

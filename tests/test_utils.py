@@ -16,10 +16,7 @@ class TestParsePortSpec(unittest.TestCase):
         self.assertEqual(parse_port_spec("22,80,443"), [22, 80, 443])
 
     def test_mixed_dedup_sorted(self):
-        self.assertEqual(
-            parse_port_spec("80,22,80,8000-8001"),
-            [22, 80, 8000, 8001]
-        )
+        self.assertEqual(parse_port_spec("80,22,80,8000-8001"), [22, 80, 8000, 8001])
 
     def test_reversed_range_raises(self):
         with self.assertRaises(ValueError):

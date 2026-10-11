@@ -6,6 +6,7 @@ authorized_targets.json — networks you own or have WRITTEN permission
 to test. There is no override flag: if it is not in the file, it does
 not run.
 """
+
 from __future__ import annotations
 
 import json
@@ -24,7 +25,9 @@ def _candidate_paths():
     # ~/.config wins over the working directory: a planted scope file in a
     # shared directory must not silently widen the authorization gate.
     return [
-        os.path.join(os.path.expanduser("~"), ".config", "shibacuddles", SCOPE_FILENAME),
+        os.path.join(
+            os.path.expanduser("~"), ".config", "shibacuddles", SCOPE_FILENAME
+        ),
         os.path.join(os.getcwd(), SCOPE_FILENAME),
         os.path.join(here, SCOPE_FILENAME),
         os.path.join(os.path.dirname(here), SCOPE_FILENAME),
@@ -80,8 +83,11 @@ def require_authorized(ssid=None, bssid=None, action="wireless attack"):
     if not is_authorized(ssid=ssid, bssid=bssid):
         target = bssid or ssid or "<unspecified>"
         in_effect = scope_file_path()
-        where = (f"Scope file in effect: {in_effect}."
-                 if in_effect else "No scope file found in any search location.")
+        where = (
+            f"Scope file in effect: {in_effect}."
+            if in_effect
+            else "No scope file found in any search location."
+        )
         raise AuthorizationError(
             f"Refusing {action} against '{target}': not in authorized scope. {where} "
             f"Add the network to {SCOPE_FILENAME} (see {EXAMPLE_FILENAME}) — "

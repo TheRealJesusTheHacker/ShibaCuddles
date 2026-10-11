@@ -3,24 +3,25 @@ ShibaCuddles Scanner Core Module
 Orchestrates network scanning operations with optimization and performance tuning.
 """
 
+import ipaddress
 import logging
 import threading
-from typing import List, Dict, Optional, Callable
-from concurrent.futures import ThreadPoolExecutor, as_completed
-from dataclasses import dataclass, asdict
 import time
-import ipaddress
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from dataclasses import dataclass
+from typing import Callable, Dict, List, Optional
 
 from .device import DeviceDiscovery
 from .port_scanner import PortScanner
-from .service_detector import ServiceDetector
 from .results_handler import ResultsHandler
+from .service_detector import ServiceDetector
 from .utils import format_elapsed_time, parse_port_spec
 
 
 @dataclass
 class ScanResult:
     """Data class for scan results."""
+
     ip: str
     alive: bool
     open_ports: List[int] = None
@@ -29,7 +30,7 @@ class ScanResult:
     services: Dict[int, Dict] = None
     os_info: Dict = None
     scan_time: float = 0.0
-    
+
     def __post_init__(self):
         if self.open_ports is None:
             self.open_ports = []
@@ -46,7 +47,7 @@ class ScanResult:
 class NetworkScanner:
     """
     High-performance network scanner with multi-threading and advanced features.
-    
+
     Features:
     - Device discovery via ICMP and ARP
     - High-performance port scanning
@@ -56,7 +57,7 @@ class NetworkScanner:
     - Configurable timeouts and rate limiting
     - Multiple output formats
     """
-    
+
     def __init__(
         self,
         network: str,
@@ -67,7 +68,7 @@ class NetworkScanner:
         skip_broadcast: bool = False,
         logger: Optional[logging.Logger] = None,
         stop_event: Optional[threading.Event] = None,
-        progress_callback: Optional[Callable[[int, int], None]] = None
+        progress_callback: Optional[Callable[[int, int], None]] = None,
     ):
         """
         Initialize the network scanner.
@@ -100,27 +101,31 @@ class NetworkScanner:
 
         # Initialize components with the CLAMPED values, so the minimums
         # enforced above actually apply to the components doing the work.
-        self.device_discovery = DeviceDiscovery(timeout=self.timeout, logger=self.logger)
+        self.device_discovery = DeviceDiscovery(
+            timeout=self.timeout, logger=self.logger
+        )
         self.port_scanner = PortScanner(
             threads=self.threads,
             timeout=self.timeout,
             rate_limit=self.rate_limit,
             logger=self.logger,
-            stop_event=self.stop_event
+            stop_event=self.stop_event,
         )
-        self.service_detector = ServiceDetector(timeout=self.timeout, logger=self.logger)
+        self.service_detector = ServiceDetector(
+            timeout=self.timeout, logger=self.logger
+        )
         self.results_handler = ResultsHandler(logger=self.logger)
-        
+
         # Statistics
         self.stats = {
-            'total_hosts': 0,
-            'alive_hosts': 0,
-            'dead_hosts': 0,
-            'open_ports_found': 0,
-            'scan_duration': 0.0,
-            'hosts_per_second': 0.0
+            "total_hosts": 0,
+            "alive_hosts": 0,
+            "dead_hosts": 0,
+            "open_ports_found": 0,
+            "scan_duration": 0.0,
+            "hosts_per_second": 0.0,
         }
-    
+
     def _should_stop(self) -> bool:
         """Check whether a stop was requested via the stop event."""
         return self.stop_event.is_set()
@@ -138,34 +143,34 @@ class NetworkScanner:
     def scan(self, port_range: str) -> List[ScanResult]:
         """
         Execute comprehensive network scan.
-        
+
         Args:
             port_range: Port specification (e.g., "1-1024" or "22,80,443")
-        
+
         Returns:
             List of ScanResult objects with findings
         """
         start_time = time.time()
         results = []
-        
+
         try:
             # Step 1: Parse network and get target IPs
             self.logger.info(f"Parsing network: {self.network}")
             target_ips = self._get_target_hosts()
-            self.stats['total_hosts'] = len(target_ips)
+            self.stats["total_hosts"] = len(target_ips)
             self.logger.info(f"Target hosts: {len(target_ips)}")
-            
+
             # Step 2: Device discovery (optional but recommended)
             if self.ping_sweep:
                 self.logger.info("Starting device discovery phase...")
                 alive_ips = self._discover_devices(target_ips)
-                self.stats['alive_hosts'] = len(alive_ips)
-                self.stats['dead_hosts'] = len(target_ips) - len(alive_ips)
+                self.stats["alive_hosts"] = len(alive_ips)
+                self.stats["dead_hosts"] = len(target_ips) - len(alive_ips)
                 self.logger.info(f"Discovered {len(alive_ips)} alive hosts")
             else:
                 alive_ips = target_ips
                 self.logger.info("Skipping device discovery, scanning all hosts")
-            
+
             # Step 3: Port scanning
             if alive_ips and not self._should_stop():
                 self.logger.info("Starting port scanning phase...")
@@ -173,10 +178,11 @@ class NetworkScanner:
 
                 # Count open ports
                 for result in results:
-                    self.stats['open_ports_found'] += len(result.open_ports)
+                    self.stats["open_ports_found"] += len(result.open_ports)
 
                 self.logger.info(
-                    f"Port scan complete. Found {self.stats['open_ports_found']} open ports"
+                    f"Port scan complete. "
+                    f"Found {self.stats['open_ports_found']} open ports"
                 )
 
             # Step 4: Service detection (optional)
@@ -191,37 +197,40 @@ class NetworkScanner:
 
         finally:
             # Calculate statistics
-            self.stats['scan_duration'] = time.time() - start_time
-            if self.stats['scan_duration'] > 0:
-                self.stats['hosts_per_second'] = (
-                    self.stats['total_hosts'] / self.stats['scan_duration']
+            self.stats["scan_duration"] = time.time() - start_time
+            if self.stats["scan_duration"] > 0:
+                self.stats["hosts_per_second"] = (
+                    self.stats["total_hosts"] / self.stats["scan_duration"]
                 )
             self.logger.info(self._format_statistics())
-        
+
         return results
-    
+
     def _get_target_hosts(self) -> List[str]:
         """Parse network and return list of target IPs."""
         try:
             network = ipaddress.ip_network(self.network, strict=False)
             if network.num_addresses > 65536:
                 raise ValueError(
-                    f"Target {self.network} contains {network.num_addresses:,} addresses, "
+                    f"Target {self.network} contains "
+                    f"{network.num_addresses:,} addresses, "
                     "exceeding the 65,536-address limit. Narrow the target range."
                 )
             hosts = list(network.hosts())
-            
+
             if self.skip_broadcast:
                 # Remove broadcast and network addresses
-                hosts = [str(ip) for ip in hosts if str(ip) != str(network.broadcast_address)]
+                hosts = [
+                    str(ip) for ip in hosts if str(ip) != str(network.broadcast_address)
+                ]
             else:
                 hosts = [str(ip) for ip in hosts]
-            
+
             return hosts
         except ValueError as e:
             self.logger.error(f"Invalid network format: {e}")
             raise
-    
+
     def _discover_devices(self, target_ips: List[str]) -> List[str]:
         """Discover alive devices using ICMP and ARP."""
         alive_ips = []
@@ -233,7 +242,7 @@ class NetworkScanner:
         chunk_size = 1024
         with ThreadPoolExecutor(max_workers=self.threads) as executor:
             for chunk_start in range(0, len(target_ips), chunk_size):
-                chunk = target_ips[chunk_start:chunk_start + chunk_size]
+                chunk = target_ips[chunk_start : chunk_start + chunk_size]
                 futures = {
                     executor.submit(self.device_discovery.is_alive, ip): ip
                     for ip in chunk
@@ -285,21 +294,23 @@ class NetworkScanner:
             except Exception as e:
                 self.logger.debug(f"Port scan failed for {host}: {e}")
                 open_ports = []
-            results.append(ScanResult(
-                ip=host,
-                alive=True,
-                open_ports=open_ports,
-                scan_time=time.time() - t0,
-            ))
+            results.append(
+                ScanResult(
+                    ip=host,
+                    alive=True,
+                    open_ports=open_ports,
+                    scan_time=time.time() - t0,
+                )
+            )
             self._report_progress(idx, total)
         return results
+
     def _map_parallel(self, func, results: List[ScanResult]) -> List[ScanResult]:
         """Apply func to each result in a thread pool, preserving order."""
         ordered: List[Optional[ScanResult]] = [None] * len(results)
         with ThreadPoolExecutor(max_workers=self.threads) as executor:
             futures = {
-                executor.submit(func, result): idx
-                for idx, result in enumerate(results)
+                executor.submit(func, result): idx for idx, result in enumerate(results)
             }
             for future in as_completed(futures):
                 if self._should_stop():
@@ -319,12 +330,12 @@ class NetworkScanner:
 
     def _detect_services(self, results: List[ScanResult]) -> List[ScanResult]:
         """Detect services running on open ports (parallel across hosts)."""
+
         def _detect_one(result: ScanResult) -> ScanResult:
             if result.open_ports:
                 self.logger.debug(f"Detecting services on {result.ip}")
                 result.services = self.service_detector.detect(
-                    result.ip,
-                    result.open_ports
+                    result.ip, result.open_ports
                 )
             return result
 
@@ -332,54 +343,61 @@ class NetworkScanner:
 
     def _detect_os(self, results: List[ScanResult]) -> List[ScanResult]:
         """Perform OS fingerprinting (parallel across hosts)."""
+
         def _fingerprint_one(result: ScanResult) -> ScanResult:
             self.logger.debug(f"Fingerprinting OS on {result.ip}")
             result.os_info = self.service_detector.detect_os(result.ip)
             return result
 
         return self._map_parallel(_fingerprint_one, results)
-    
+
     def print_results(self, results: List[ScanResult]) -> None:
         """Display results in human-readable format."""
         if not results:
             print("No results to display")
             return
-        
-        print("\n" + "="*80)
+
+        print("\n" + "=" * 80)
         print("SCAN RESULTS - ShibaCuddles Network Scanner")
-        print("="*80 + "\n")
-        
+        print("=" * 80 + "\n")
+
         for result in results:
             print(f"Host: {result.ip}")
             print(f"  Status: {'ALIVE' if result.alive else 'DEAD'}")
-            
+
             if result.open_ports:
                 print(f"  Open Ports: {', '.join(map(str, result.open_ports))}")
-                
+
                 if result.services:
                     print("  Services:")
                     for port, service_info in result.services.items():
-                        service_name = service_info.get('name', 'Unknown')
-                        version = service_info.get('version', '')
+                        service_name = service_info.get("name", "Unknown")
+                        version = service_info.get("version", "")
                         print(f"    {port}: {service_name} {version}".strip())
             else:
                 print("  Open Ports: None found")
-            
+
             if result.os_info:
-                os_name = result.os_info.get('name', 'Unknown')
-                confidence = result.os_info.get('confidence', 0)
+                os_name = result.os_info.get("name", "Unknown")
+                confidence = result.os_info.get("confidence", 0)
                 print(f"  OS: {os_name} (Confidence: {confidence}%)")
-            
+
             print(f"  Scan Time: {result.scan_time:.2f}s\n")
-        
-        print("="*80)
+
+        print("=" * 80)
         print(f"Statistics: {self._format_statistics()}")
-        print("="*80 + "\n")
-    
-    def save_results(self, results: List[ScanResult], filepath: str, format: str = "json", force: bool = False) -> None:
+        print("=" * 80 + "\n")
+
+    def save_results(
+        self,
+        results: List[ScanResult],
+        filepath: str,
+        format: str = "json",
+        force: bool = False,
+    ) -> None:
         """Save results to file."""
         self.results_handler.save(results, filepath, format, force)
-    
+
     def _format_statistics(self) -> str:
         """Format scan statistics."""
         return (

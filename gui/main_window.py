@@ -5,28 +5,43 @@ PyQt6-based graphical interface for network scanning and security testing.
 
 import sys
 import threading
-from typing import List, Dict
 from datetime import datetime
 from pathlib import Path
+from typing import List
 
 try:
+    from PyQt6.QtCore import QThread, pyqtSignal
+    from PyQt6.QtGui import QColor, QFont
     from PyQt6.QtWidgets import (
-        QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
-        QTabWidget, QTableWidget, QTableWidgetItem, QPushButton, QLineEdit,
-        QLabel, QComboBox, QSpinBox, QCheckBox, QProgressBar, QTextEdit,
-        QFileDialog, QMessageBox, QDialog, QDialogButtonBox, QGroupBox,
-        QFrame, QGridLayout
+        QApplication,
+        QCheckBox,
+        QFileDialog,
+        QFrame,
+        QGridLayout,
+        QGroupBox,
+        QHBoxLayout,
+        QLabel,
+        QLineEdit,
+        QMainWindow,
+        QMessageBox,
+        QProgressBar,
+        QPushButton,
+        QSpinBox,
+        QTableWidget,
+        QTableWidgetItem,
+        QTabWidget,
+        QTextEdit,
+        QVBoxLayout,
+        QWidget,
     )
-    from PyQt6.QtCore import Qt, QThread, pyqtSignal, QTimer
-    from PyQt6.QtGui import QColor, QFont, QIcon
-    from PyQt6.QtChart import QChart, QChartView, QBarSeries, QBarSet, QBarCategoryAxis, QValueAxis
 except ImportError:
     print("PyQt6 not installed. Install with: pip install PyQt6 PyQt6-Charts")
     sys.exit(1)
 
 import logging
-from src.scanner import NetworkScanner
+
 from src.results_handler import ResultsHandler
+from src.scanner import NetworkScanner
 
 try:
     from src import __version__ as _APP_VERSION
@@ -37,6 +52,7 @@ except Exception:
 def _is_private_target(network: str) -> bool:
     """Return True if the target is private (RFC1918) address space."""
     import ipaddress
+
     try:
         return ipaddress.ip_network(network.strip(), strict=False).is_private
     except ValueError:
@@ -46,11 +62,11 @@ def _is_private_target(network: str) -> bool:
 # ---------------------------------------------------------------------------
 # Theme
 # ---------------------------------------------------------------------------
-_ACCENT = "#3ddc84"        # mint green accent
+_ACCENT = "#3ddc84"  # mint green accent
 _ACCENT_DARK = "#2bb673"
-_BG = "#14161b"            # app background
-_PANEL = "#1b1f27"         # sidebar / card background
-_PANEL_ALT = "#20242e"     # raised elements
+_BG = "#14161b"  # app background
+_PANEL = "#1b1f27"  # sidebar / card background
+_PANEL_ALT = "#20242e"  # raised elements
 _BORDER = "#2c313d"
 _TEXT = "#e8ebf1"
 _TEXT_DIM = "#9aa3b2"
@@ -62,13 +78,22 @@ class ScannerThread(QThread):
     """
     Worker thread for network scanning.
     """
+
     progress = pyqtSignal(int)
     finished = pyqtSignal(list)
     error = pyqtSignal(str)
 
-    def __init__(self, network: str, ports: str, threads: int, timeout: float,
-                 ping_sweep: bool = True, service_detection: bool = False,
-                 os_detection: bool = False, aggressive: bool = False):
+    def __init__(
+        self,
+        network: str,
+        ports: str,
+        threads: int,
+        timeout: float,
+        ping_sweep: bool = True,
+        service_detection: bool = False,
+        os_detection: bool = False,
+        aggressive: bool = False,
+    ):
         super().__init__()
         self.network = network
         self.ports = ports
@@ -88,6 +113,7 @@ class ScannerThread(QThread):
     def run(self):
         """Run the scan in background thread."""
         try:
+
             def _on_progress(done: int, total: int):
                 pct = int(done / max(total, 1) * 100)
                 self.progress.emit(pct)
@@ -98,7 +124,7 @@ class ScannerThread(QThread):
                 timeout=self.timeout,
                 logger=self.logger,
                 stop_event=self._stop_event,
-                progress_callback=_on_progress
+                progress_callback=_on_progress,
             )
             scanner.ping_sweep = self.ping_sweep
             if self.aggressive:
@@ -366,8 +392,7 @@ class ShibaCuddlesGUI(QMainWindow):
         self.card_alive = StatCard("Hosts alive", accent=_ACCENT)
         self.card_ports = StatCard("Open ports", accent="#6cb8ff")
         self.card_avg = StatCard("Avg ports / host", accent="#c9a6ff")
-        for card in (self.card_hosts, self.card_alive,
-                     self.card_ports, self.card_avg):
+        for card in (self.card_hosts, self.card_alive, self.card_ports, self.card_avg):
             cards_row.addWidget(card)
         stats_layout.addLayout(cards_row)
 
@@ -612,8 +637,7 @@ class ShibaCuddlesGUI(QMainWindow):
     def _log(self, message: str, level: str = "info"):
         """Append a timestamped, color-coded line to the activity log."""
         ts = datetime.now().strftime("%H:%M:%S")
-        colors = {"info": "#9aa3b2", "ok": _ACCENT, "error": _DANGER,
-                  "warn": "#f0b429"}
+        colors = {"info": "#9aa3b2", "ok": _ACCENT, "error": _DANGER, "warn": "#f0b429"}
         color = colors.get(level, colors["info"])
         self.log_text.append(
             f'<span style="color:#5c6575;">[{ts}]</span> '
@@ -631,8 +655,11 @@ class ShibaCuddlesGUI(QMainWindow):
         timeout = self.timeout_spinner.value()
 
         if not network:
-            QMessageBox.warning(self, "Missing Target",
-                                "Please enter a target network in CIDR notation.")
+            QMessageBox.warning(
+                self,
+                "Missing Target",
+                "Please enter a target network in CIDR notation.",
+            )
             return
 
         # Scope guardrail: warn before scanning non-private address space.
@@ -659,7 +686,10 @@ class ShibaCuddlesGUI(QMainWindow):
         self._log(f"Starting scan on {network} (ports {ports or 'default'})")
 
         self.scanner_thread = ScannerThread(
-            network, ports, threads, timeout,
+            network,
+            ports,
+            threads,
+            timeout,
             ping_sweep=self.ping_sweep_check.isChecked(),
             service_detection=self.service_detection_check.isChecked(),
             os_detection=self.os_detection_check.isChecked(),
@@ -695,7 +725,7 @@ class ShibaCuddlesGUI(QMainWindow):
         self.results_table.setRowCount(0)
         batch_size = 50
         for start in range(0, len(results), batch_size):
-            chunk = results[start:start + batch_size]
+            chunk = results[start : start + batch_size]
             base = self.results_table.rowCount()
             self.results_table.setRowCount(base + len(chunk))
             for offset, result in enumerate(chunk):
@@ -709,7 +739,8 @@ class ShibaCuddlesGUI(QMainWindow):
         self.scan_button.setText("Start Scan")
         self.stop_button.setEnabled(False)
         self.statusBar().showMessage(
-            f"Scan completed — {sum(1 for r in results if r.alive)} host(s) alive")
+            f"Scan completed — {sum(1 for r in results if r.alive)} host(s) alive"
+        )
 
     def _fill_result_row(self, row: int, result):
         """Fill a single row of the results table."""
@@ -719,8 +750,7 @@ class ShibaCuddlesGUI(QMainWindow):
         if len(result.open_ports) > 8:
             ports += f" (+{len(result.open_ports) - 8} more)"
         services = str(len(result.services)) if result.services else "0"
-        os_name = (result.os_info.get("name", "Unknown")
-                   if result.os_info else "Unknown")
+        os_name = result.os_info.get("name", "Unknown") if result.os_info else "Unknown"
 
         ip_item = QTableWidgetItem(ip)
         mono = QFont("Consolas", 10)
@@ -728,8 +758,7 @@ class ShibaCuddlesGUI(QMainWindow):
         ip_item.setFont(mono)
 
         status_item = QTableWidgetItem("● ALIVE" if alive else "○ DOWN")
-        status_item.setForeground(
-            QColor(_ACCENT) if alive else QColor(_TEXT_DIM))
+        status_item.setForeground(QColor(_ACCENT) if alive else QColor(_TEXT_DIM))
         font = status_item.font()
         font.setBold(True)
         status_item.setFont(font)
@@ -770,8 +799,7 @@ class ShibaCuddlesGUI(QMainWindow):
             f"Avg ports / host:   {avg:.2f}",
         ]
         if alive_hosts:
-            top = sorted(results, key=lambda r: len(r.open_ports),
-                         reverse=True)[:5]
+            top = sorted(results, key=lambda r: len(r.open_ports), reverse=True)[:5]
             lines.append("")
             lines.append("Top hosts by open ports:")
             for r in top:
@@ -781,15 +809,16 @@ class ShibaCuddlesGUI(QMainWindow):
     def export_results(self):
         """Export scan results to file."""
         if not self.scan_results:
-            QMessageBox.warning(self, "No Results",
-                                "There are no scan results to export yet.")
+            QMessageBox.warning(
+                self, "No Results", "There are no scan results to export yet."
+            )
             return
 
         file_path, file_format = QFileDialog.getSaveFileName(
             self,
             "Export Results",
             "",
-            "JSON (*.json);;CSV (*.csv);;XML (*.xml);;Text (*.txt)"
+            "JSON (*.json);;CSV (*.csv);;XML (*.xml);;Text (*.txt)",
         )
 
         if file_path:
@@ -797,19 +826,25 @@ class ShibaCuddlesGUI(QMainWindow):
                 "*.json": "json",
                 "*.csv": "csv",
                 "*.xml": "xml",
-                "*.txt": "txt"
+                "*.txt": "txt",
             }
 
             export_format = format_map.get(
-                file_format.split("(")[1].split(")")[0] if "(" in file_format else "json",
-                "json"
+                (
+                    file_format.split("(")[1].split(")")[0]
+                    if "(" in file_format
+                    else "json"
+                ),
+                "json",
             )
 
             if Path(file_path).exists():
                 reply = QMessageBox.question(
-                    self, "Overwrite?",
+                    self,
+                    "Overwrite?",
                     f"{file_path} already exists.\nOverwrite it?",
-                    QMessageBox.Yes | QMessageBox.No, QMessageBox.No
+                    QMessageBox.Yes | QMessageBox.No,
+                    QMessageBox.No,
                 )
                 if reply != QMessageBox.Yes:
                     return
@@ -817,14 +852,11 @@ class ShibaCuddlesGUI(QMainWindow):
             handler = ResultsHandler()
             if handler.save(self.scan_results, file_path, export_format, force=True):
                 QMessageBox.information(
-                    self,
-                    "Export Successful",
-                    f"Results exported to:\n{file_path}"
+                    self, "Export Successful", f"Results exported to:\n{file_path}"
                 )
                 self._log(f"Results exported to {file_path}", "ok")
             else:
-                QMessageBox.critical(self, "Export Failed",
-                                     "Failed to export results.")
+                QMessageBox.critical(self, "Export Failed", "Failed to export results.")
 
 
 def main():
