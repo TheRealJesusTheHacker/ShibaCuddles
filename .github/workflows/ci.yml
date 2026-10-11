@@ -14,8 +14,10 @@ jobs:
     name: Compile check (Linux)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v5
         with:
           python-version: "3.11"
       - name: Byte-compile every module
@@ -25,8 +27,10 @@ jobs:
     name: Compile check (Windows)
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v5
         with:
           python-version: "3.11"
       - name: Install runtime dependencies
@@ -34,12 +38,31 @@ jobs:
       - name: Byte-compile every module
         run: python -m compileall -q src gui main.py gui_launcher.py
 
+  lint:
+    name: Lint & format check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v5
+        with:
+          python-version: "3.11"
+      - name: Install lint tooling
+        run: pip install -r requirements-dev.txt
+      - name: black --check
+        run: python -m black --check src gui tests main.py gui_launcher.py
+      - name: ruff check
+        run: python -m ruff check src gui tests main.py gui_launcher.py
+
   test:
     name: Unit tests
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v5
         with:
           python-version: "3.11"
       - name: Install dev dependencies

@@ -14,8 +14,8 @@ jobs:
       attestations: write
       id-token: write
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v5
         with:
           python-version: "3.11"
       - name: Install dependencies
@@ -37,7 +37,7 @@ jobs:
             dist/*.exe
             dist/SHA256SUMS-windows.txt
       - name: Upload to GitHub Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2.6.2
         with:
           files: |
             dist/*.exe
@@ -52,8 +52,8 @@ jobs:
       attestations: write
       id-token: write
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v5
         with:
           python-version: "3.11"
       - name: Install dependencies
@@ -74,7 +74,7 @@ jobs:
             dist/ShibaCuddles
             dist/SHA256SUMS-linux.txt
       - name: Upload to GitHub Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2.6.2
         with:
           files: |
             dist/ShibaCuddles
