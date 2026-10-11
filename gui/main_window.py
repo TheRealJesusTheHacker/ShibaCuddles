@@ -849,6 +849,11 @@ class ShibaCuddlesGUI(QMainWindow):
                 if reply != QMessageBox.Yes:
                     return
 
+            # Windows relies on file extensions for associations: append the
+            # chosen format's extension when the user typed a bare name.
+            if not Path(file_path).suffix:
+                file_path = f"{file_path}.{export_format}"
+
             handler = ResultsHandler()
             if handler.save(self.scan_results, file_path, export_format, force=True):
                 QMessageBox.information(

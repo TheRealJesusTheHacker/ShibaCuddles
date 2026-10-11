@@ -211,6 +211,13 @@ its target is allowlisted.
 Requires the `aircrack-ng` suite and Linux. **Every attack function is
 gated by `authorized_targets.json` — see the Authorized Use section.**
 
+On Windows (or without the suite installed), the module still imports
+cleanly: `WiFiDeauthenticator()` logs a warning and the Linux-only
+functions (`enable_monitor_mode`, `scan_nearby_networks`,
+`deauthenticate_*`, `create_rogue_ap`) return `False`/`[]` instead of
+raising. Device discovery, port scanning, service detection, and export
+are fully supported on Windows.
+
 - **Monitor mode** — `enable_monitor_mode` / `disable_monitor_mode`
   (`airmon-ng start/stop`, with interfering-process cleanup and
   networking restart on teardown).
@@ -258,7 +265,9 @@ gated by `authorized_targets.json` — see the Authorized Use section.**
 ### Results & export (`src/results_handler.py`)
 
 - **JSON, CSV, XML, and plain-text** export; the format is auto-detected
-  from the output file's extension.
+  from the output file's extension (case-insensitive, so `.CSV` works on
+  Windows). All exports are written as UTF-8, explicitly — non-ASCII
+  hostnames and service banners survive Windows' locale codepage.
 - **No-clobber default** — saving refuses to overwrite an existing file
   unless you pass `--force` (CLI) / `force=True` (API).
 - `generate_report()` builds a human-readable summary (totals + per-host

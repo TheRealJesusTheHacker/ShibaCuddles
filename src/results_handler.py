@@ -46,12 +46,14 @@ class ResultsHandler:
                     f"Refusing to overwrite existing file: {filepath} "
                     "(pass force=True or use --force to overwrite)"
                 )
-            # Auto-detect format from file extension if not specified
-            if format == "json" and filepath.endswith(".csv"):
+            # Auto-detect format from file extension if not specified.
+            # Case-insensitive: Windows users commonly have .CSV/.JSON/.XML.
+            lowered = filepath.lower()
+            if format == "json" and lowered.endswith(".csv"):
                 format = "csv"
-            elif format == "json" and filepath.endswith(".xml"):
+            elif format == "json" and lowered.endswith(".xml"):
                 format = "xml"
-            elif format == "json" and filepath.endswith(".txt"):
+            elif format == "json" and lowered.endswith(".txt"):
                 format = "txt"
 
             # Save in requested format
@@ -82,7 +84,7 @@ class ResultsHandler:
             else:
                 results_dict.append(result)
 
-        with open(filepath, "w") as f:
+        with open(filepath, "w", encoding="utf-8") as f:
             json.dump(results_dict, f, indent=2)
 
     def _save_csv(self, results: List, filepath: str) -> None:
@@ -107,7 +109,7 @@ class ResultsHandler:
             rows.append(flat_row)
 
         if rows:
-            with open(filepath, "w", newline="") as f:
+            with open(filepath, "w", newline="", encoding="utf-8") as f:
                 writer = csv.DictWriter(f, fieldnames=rows[0].keys())
                 writer.writeheader()
                 writer.writerows(rows)
@@ -149,12 +151,12 @@ class ResultsHandler:
                 time_elem.text = str(result_dict["scan_time"])
 
         xml_str = minidom.parseString(ET.tostring(root)).toprettyxml(indent="  ")
-        with open(filepath, "w") as f:
+        with open(filepath, "w", encoding="utf-8") as f:
             f.write("\n".join(xml_str.split("\n")[1:]))
 
     def _save_txt(self, results: List, filepath: str) -> None:
         """Save results as human-readable text."""
-        with open(filepath, "w") as f:
+        with open(filepath, "w", encoding="utf-8") as f:
             f.write("=" * 80 + "\n")
             f.write("ShibaCuddles Network Scanner - Scan Results\n")
             f.write("=" * 80 + "\n\n")

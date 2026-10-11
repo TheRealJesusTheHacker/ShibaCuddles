@@ -66,9 +66,10 @@ class WiFiDeauthenticator:
 
     def _check_airmon_ng(self) -> bool:
         """Check if airmon-ng is installed."""
+        # shutil.which is cross-platform; shelling out to the Unix-only
+        # "which" binary would raise FileNotFoundError on Windows.
         try:
-            subprocess.run(["which", "airmon-ng"], capture_output=True, timeout=5)
-            return True
+            return shutil.which("airmon-ng") is not None
         except Exception as e:
             self.logger.warning(f"airmon-ng not found: {e}")
             return False
@@ -76,8 +77,7 @@ class WiFiDeauthenticator:
     def _check_aireplay_ng(self) -> bool:
         """Check if aireplay-ng is installed."""
         try:
-            subprocess.run(["which", "aireplay-ng"], capture_output=True, timeout=5)
-            return True
+            return shutil.which("aireplay-ng") is not None
         except Exception as e:
             self.logger.warning(f"aireplay-ng not found: {e}")
             return False
