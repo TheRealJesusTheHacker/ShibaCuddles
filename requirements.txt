@@ -6,7 +6,9 @@ scapy==2.8.0
 
 # GUI dashboard
 PyQt6==6.11.0
-PyQt6-Charts>=6.0.0
+# Upper bound keeps a future PyQt6-Charts major release (new Qt ABI) from
+# silently swapping in under the pinned PyQt6 above.
+PyQt6-Charts>=6.0.0,<7.0.0
 
 # WiFi testing helpers (install separately via your OS package manager):
 #   Ubuntu/Debian: sudo apt-get install aircrack-ng
