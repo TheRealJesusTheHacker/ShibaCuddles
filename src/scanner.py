@@ -329,14 +329,30 @@ class NetworkScanner:
         return ordered
 
     def _detect_services(self, results: List[ScanResult]) -> List[ScanResult]:
-        """Detect services running on open ports (parallel across hosts)."""
+        """Detect services running on open ports (parallel across hosts).
+
+        Ports within a host are probed serially on purpose: this runs
+        inside the per-host thread pool above, so calling
+        ServiceDetector.detect() here would nest its per-port pool inside
+        it and multiply thread counts (threads^2). detect_service is
+        thread-safe, so per-host serial probing is safe.
+        """
 
         def _detect_one(result: ScanResult) -> ScanResult:
             if result.open_ports:
                 self.logger.debug(f"Detecting services on {result.ip}")
-                result.services = self.service_detector.detect(
-                    result.ip, result.open_ports
-                )
+                services = {}
+                for port in result.open_ports:
+                    try:
+                        info = self.service_detector.detect_service(result.ip, port)
+                    except Exception as e:
+                        self.logger.debug(
+                            f"Service detection failed on " f"{result.ip}:{port}: {e}"
+                        )
+                        continue
+                    if info:
+                        services[port] = info
+                result.services = services
             return result
 
         return self._map_parallel(_detect_one, results)

@@ -160,6 +160,32 @@ class WiFiDeauthenticator:
             self.logger.error(f"Error disabling monitor mode: {e}")
             return False
 
+    def get_wireless_interfaces(self) -> List[str]:
+        """
+        Get list of wireless interfaces.
+
+        Returns:
+            List of wireless interface names
+        """
+        interfaces = []
+
+        if self.system == "linux":
+            try:
+                result = subprocess.run(
+                    ["iwconfig"], capture_output=True, text=True, timeout=5
+                )
+
+                # Parse iwconfig output
+                for line in result.stdout.split("\n"):
+                    if "IEEE 802.11" in line:
+                        interface = line.split()[0]
+                        interfaces.append(interface)
+
+            except Exception as e:
+                self.logger.debug(f"Error getting wireless interfaces: {e}")
+
+        return interfaces
+
     def scan_nearby_networks(self, interface: str, duration: int = 10) -> List[Dict]:
         """
         Scan for nearby WiFi networks.
@@ -471,32 +497,6 @@ def _require_single_line(value: str, name: str) -> str:
     if "\r" in text or "\n" in text:
         raise ValueError(f"{name} must not contain CR or LF characters")
     return text
-
-    def get_wireless_interfaces(self) -> List[str]:
-        """
-        Get list of wireless interfaces.
-
-        Returns:
-            List of wireless interface names
-        """
-        interfaces = []
-
-        if self.system == "linux":
-            try:
-                result = subprocess.run(
-                    ["iwconfig"], capture_output=True, text=True, timeout=5
-                )
-
-                # Parse iwconfig output
-                for line in result.stdout.split("\n"):
-                    if "IEEE 802.11" in line:
-                        interface = line.split()[0]
-                        interfaces.append(interface)
-
-            except Exception as e:
-                self.logger.debug(f"Error getting wireless interfaces: {e}")
-
-        return interfaces
 
 
 class NetworkInterruptor:

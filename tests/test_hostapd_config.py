@@ -31,9 +31,7 @@ class TestHostapdConfigHardening(unittest.TestCase):
 
     def test_crlf_interface_rejected(self):
         with self.assertRaises(ValueError):
-            self.d._generate_hostapd_config(
-                "wlan0\r\nfoo=bar", "TestLab", 6, "x"
-            )
+            self.d._generate_hostapd_config("wlan0\r\nfoo=bar", "TestLab", 6, "x")
 
     def test_non_integer_channel_rejected(self):
         with self.assertRaises(ValueError):

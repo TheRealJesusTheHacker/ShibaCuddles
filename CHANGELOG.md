@@ -14,6 +14,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (including a callback that raises), and the airodump-ng CSV parser
   (AP section, station-section cutoff, comma-in-SSID handling, malformed
   rows) — suite now 49 tests
+- 9 new unit tests from the concurrency/edge-case audit: service detection
+  no longer nests a per-port pool inside the per-host pool, Ctrl+C during
+  TCP/UDP scans cancels queued probes instead of draining the queue,
+  and `WiFiDeauthenticator.get_wireless_interfaces` is a real reachable
+  method again (iwconfig parsing, failure and non-Linux paths) — suite now
+  64 tests
 - CI `lint` job: `black --check` + `ruff check` on every push/PR;
   `pyproject.toml` pins the ruff rule set (E/F/W/I) and black config
 - Issue templates (bug report, feature request) and a PR template with an
@@ -41,6 +47,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   pay for a fresh `getaddrinfo` on every port
 - Traffic capture uses a private `tempfile` path instead of a predictable
   `/tmp/traffic.pcap` (symlink-planting risk under sudo)
+- Service detection no longer nests `ServiceDetector.detect()`'s per-port
+  thread pool inside the per-host pool (`_map_parallel`) — threads^2, up to
+  ~1,280 threads. The pipeline now probes each host's ports serially via
+  `detect_service` while hosts stay parallel; `detect()` keeps its own pool
+  for direct API use
+- Ctrl+C during a TCP or UDP port scan now cancels the queued probes
+  instead of letting pool teardown run every pending future to completion
+  first; running probes are timeout-bounded and still close their sockets
+- Restored `WiFiDeauthenticator.get_wireless_interfaces` as a real method —
+  it was unreachable dead code (defined after a `return` in a
+  module-level function), so any call raised `AttributeError`
 
 ## [0.3.1] - 2026-10-10
 

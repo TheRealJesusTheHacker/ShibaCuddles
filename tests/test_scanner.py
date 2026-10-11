@@ -120,5 +120,58 @@ class TestScanPipeline(unittest.TestCase):
             scanner._get_target_hosts()
 
 
+class TestDetectServicesNoNestedPool(unittest.TestCase):
+    """Service detection must not nest a per-port pool inside the per-host
+    pool (_map_parallel): that multiplies thread counts (threads^2, up to
+    ~1,280 threads). The pipeline probes each host's ports serially via
+    detect_service; the standalone ServiceDetector.detect() keeps its own
+    pool for direct API use."""
+
+    def _detector_scanner(self):
+        scanner = _scanner()
+        scanner.service_detector = MagicMock()
+        scanner.service_detector.detect_service.side_effect = lambda host, port: (
+            {"name": "SSH", "protocol": "tcp"} if port == 22 else None
+        )
+        return scanner
+
+    def test_detect_calls_detect_service_per_port(self):
+        scanner = self._detector_scanner()
+        results = [ScanResult(ip="127.0.0.1", alive=True, open_ports=[22, 9999])]
+
+        out = scanner._detect_services(results)
+
+        self.assertEqual(out[0].services, {22: {"name": "SSH", "protocol": "tcp"}})
+        calls = scanner.service_detector.detect_service.call_args_list
+        self.assertEqual([c.args[1] for c in calls], [22, 9999])
+
+    def test_detect_does_not_use_pooling_detect(self):
+        scanner = self._detector_scanner()
+
+        def boom(host, ports):
+            raise AssertionError("nested per-port thread pool used")
+
+        scanner.service_detector.detect.side_effect = boom
+        results = [
+            ScanResult(ip="127.0.0.1", alive=True, open_ports=[22, 80]),
+            ScanResult(ip="127.0.0.2", alive=True, open_ports=[]),
+        ]
+
+        out = scanner._detect_services(results)
+
+        # No AssertionError: detect() (the pooling path) was never called.
+        self.assertEqual(out[0].services, {22: {"name": "SSH", "protocol": "tcp"}})
+        self.assertEqual(out[1].services, {})
+
+    def test_detect_service_exception_degrades_gracefully(self):
+        scanner = self._detector_scanner()
+        scanner.service_detector.detect_service.side_effect = RuntimeError("boom")
+        results = [ScanResult(ip="127.0.0.1", alive=True, open_ports=[22])]
+
+        out = scanner._detect_services(results)
+
+        self.assertEqual(out[0].services, {})
+
+
 if __name__ == "__main__":
     unittest.main()

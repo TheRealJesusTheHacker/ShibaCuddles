@@ -127,5 +127,34 @@ class TestUDPScanner(unittest.TestCase):
         mock_socket.close.assert_called()
 
 
+class TestKeyboardInterruptAbort(unittest.TestCase):
+    """Ctrl+C mid-scan must cancel the queued probes instead of letting the
+    pool teardown run every pending future to completion first."""
+
+    def _mocked_executor_scan(self, scan_callable, scan_args):
+        futures = [MagicMock() for _ in range(3)]
+        executor = MagicMock()
+        executor.__enter__.return_value = executor
+        executor.submit.side_effect = futures
+        with patch("src.port_scanner.ThreadPoolExecutor", return_value=executor), patch(
+            "src.port_scanner.as_completed", side_effect=KeyboardInterrupt
+        ):
+            with self.assertRaises(KeyboardInterrupt):
+                scan_callable(*scan_args)
+        return futures
+
+    def test_tcp_scan_cancels_pending_probes(self):
+        scanner = PortScanner(threads=2, timeout=0.1)
+        futures = self._mocked_executor_scan(scanner.scan, ("127.0.0.1", "1-3"))
+        for fut in futures:
+            fut.cancel.assert_called_once_with()
+
+    def test_udp_scan_cancels_pending_probes(self):
+        scanner = UDPScanner(threads=2, timeout=0.1)
+        futures = self._mocked_executor_scan(scanner.scan, ("127.0.0.1", [1, 2, 3]))
+        for fut in futures:
+            fut.cancel.assert_called_once_with()
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -81,18 +81,27 @@ class PortScanner:
                 executor.submit(self._check_port, host, port): port for port in ports
             }
 
-            for future in as_completed(futures):
-                if self._should_stop():
-                    for f in futures:
-                        f.cancel()
-                    break
-                port = futures[future]
-                try:
-                    if future.result():
-                        open_ports.append(port)
-                        self.logger.debug(f"{host}:{port} is OPEN")
-                except Exception as e:
-                    self.logger.debug(f"Error scanning {host}:{port}: {e}")
+            try:
+                for future in as_completed(futures):
+                    if self._should_stop():
+                        for f in futures:
+                            f.cancel()
+                        break
+                    port = futures[future]
+                    try:
+                        if future.result():
+                            open_ports.append(port)
+                            self.logger.debug(f"{host}:{port} is OPEN")
+                    except Exception as e:
+                        self.logger.debug(f"Error scanning {host}:{port}: {e}")
+            except KeyboardInterrupt:
+                # Abort promptly: drop everything still queued so the pool
+                # teardown doesn't first run thousands of pending probes.
+                # Running probes finish on their own (socket timeout bounds
+                # them); every socket is still closed in _check_port.
+                for f in futures:
+                    f.cancel()
+                raise
 
         return sorted(open_ports)
 
@@ -248,16 +257,24 @@ class UDPScanner:
                 for port in ports
             }
 
-            for future in as_completed(futures):
-                if self.stop_event.is_set():
-                    for f in futures:
-                        f.cancel()
-                    break
-                port = futures[future]
-                try:
-                    if future.result():
-                        open_ports.append(port)
-                except Exception as e:
-                    self.logger.debug(f"UDP scan error on {host}:{port}: {e}")
+            try:
+                for future in as_completed(futures):
+                    if self.stop_event.is_set():
+                        for f in futures:
+                            f.cancel()
+                        break
+                    port = futures[future]
+                    try:
+                        if future.result():
+                            open_ports.append(port)
+                    except Exception as e:
+                        self.logger.debug(f"UDP scan error on {host}:{port}: {e}")
+            except KeyboardInterrupt:
+                # Same as TCP scan above: drop the queued probes so abort
+                # is prompt; running probes are timeout-bounded and close
+                # their sockets in _check_udp_port's finally block.
+                for f in futures:
+                    f.cancel()
+                raise
 
         return sorted(open_ports)

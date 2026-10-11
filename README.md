@@ -173,8 +173,10 @@ its target is allowlisted.
   Apache, and Nginx.
 - **Polite HTTP probing** — a `HEAD` request is only sent to plaintext
   HTTP ports (80/8080); it is never sent to TLS ports (443/8443).
-- **Parallelized** across ports (up to 20 workers) so hosts with many open
-  ports don't stall the scan.
+- **Parallelized** — the standalone `detect()` fans out across ports (up to
+  20 workers); in the scan pipeline, hosts are parallelized instead and each
+  host's ports are probed serially, so thread counts can't multiply
+  (threads²).
 - **TTL-based OS guessing** — ICMP echo via scapy, mapped to
   Windows (128), Linux/Unix (64), Cisco/network gear (255), and legacy
   Windows (32), with a confidence score. Requires scapy and raw-socket
