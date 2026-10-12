@@ -10,7 +10,10 @@ not run.
 from __future__ import annotations
 
 import json
+import logging
 import os
+
+logger = logging.getLogger(__name__)
 
 SCOPE_FILENAME = "authorized_targets.json"
 EXAMPLE_FILENAME = "authorized_targets.example.json"
@@ -63,7 +66,14 @@ def _norm_bssid(value):
 
 
 def is_authorized(ssid=None, bssid=None):
-    """True if the given SSID or BSSID is listed in the authorized scope file."""
+    """True if the given SSID or BSSID is listed in the authorized scope file.
+
+    When a BSSID was observed, the authorization is pinned to it: the
+    scope entry must carry that same BSSID. An SSID-only match is not
+    accepted in that case -- an evil twin can reuse the SSID. SSID-only
+    matching applies only when no BSSID was observed (e.g. rogue-AP
+    creation, where there is no AP BSSID yet).
+    """
     ssid = str(ssid).strip() if ssid else ""
     bssid = _norm_bssid(bssid)
     if not ssid and not bssid:
@@ -71,9 +81,10 @@ def is_authorized(ssid=None, bssid=None):
     for entry in load_scope():
         e_ssid = str(entry.get("ssid", "")).strip()
         e_bssid = _norm_bssid(entry.get("bssid", ""))
-        if bssid and e_bssid and bssid == e_bssid:
-            return True
-        if ssid and e_ssid and ssid == e_ssid:
+        if bssid:
+            if e_bssid and bssid == e_bssid:
+                return True
+        elif ssid and e_ssid and ssid == e_ssid:
             return True
     return False
 
@@ -88,11 +99,13 @@ def require_authorized(ssid=None, bssid=None, action="wireless attack"):
             if in_effect
             else "No scope file found in any search location."
         )
-        raise AuthorizationError(
+        message = (
             f"Refusing {action} against '{target}': not in authorized scope. {where} "
             f"Add the network to {SCOPE_FILENAME} (see {EXAMPLE_FILENAME}) — "
             "only networks you own or have written permission to test may be listed."
         )
+        logger.warning("Authorization refused: %s", message)
+        raise AuthorizationError(message)
 
 
 def require_scope_configured(action="wireless attack"):
@@ -104,9 +117,11 @@ def require_scope_configured(action="wireless attack"):
     """
     if not load_scope():
         searched = ", ".join(_candidate_paths())
-        raise AuthorizationError(
+        message = (
             f"Refusing {action}: no authorized scope configured. "
             f"Create {SCOPE_FILENAME} (see {EXAMPLE_FILENAME}) listing the networks "
             "you own or have written permission to test. "
             f"Searched: {searched}."
         )
+        logger.warning("Authorization refused: %s", message)
+        raise AuthorizationError(message)
