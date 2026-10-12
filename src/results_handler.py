@@ -48,7 +48,7 @@ class ResultsHandler:
                 )
             # Auto-detect format from file extension if not specified.
             # Case-insensitive: Windows users commonly have .CSV/.JSON/.XML.
-            lowered = filepath.lower()
+            lowered = str(filepath).lower()
             if format == "json" and lowered.endswith(".csv"):
                 format = "csv"
             elif format == "json" and lowered.endswith(".xml"):
