@@ -153,6 +153,17 @@ class NetworkScanner:
         start_time = time.time()
         results = []
 
+        # Reset per-run statistics so repeated scan() calls on one instance
+        # don't accumulate hosts/ports from earlier runs.
+        self.stats = {
+            "total_hosts": 0,
+            "alive_hosts": 0,
+            "dead_hosts": 0,
+            "open_ports_found": 0,
+            "scan_duration": 0.0,
+            "hosts_per_second": 0.0,
+        }
+
         try:
             # Step 1: Parse network and get target IPs
             self.logger.info(f"Parsing network: {self.network}")
@@ -242,6 +253,11 @@ class NetworkScanner:
         chunk_size = 1024
         with ThreadPoolExecutor(max_workers=self.threads) as executor:
             for chunk_start in range(0, len(target_ips), chunk_size):
+                if self._should_stop():
+                    # A stop inside the inner future loop only breaks out of
+                    # that loop; without this check the outer loop would keep
+                    # submitting every remaining chunk. Abort them all.
+                    break
                 chunk = target_ips[chunk_start : chunk_start + chunk_size]
                 futures = {
                     executor.submit(self.device_discovery.is_alive, ip): ip
@@ -264,7 +280,16 @@ class NetworkScanner:
                     completed += 1
                     self._report_progress(completed, total)
 
-        return sorted(alive_ips)
+        # Numeric sort (not lexicographic): without this, "192.168.1.10"
+        # sorts before "192.168.1.2". Version-first ordering keeps IPv4
+        # and IPv6 blocks separate without raising on mixed input.
+        return sorted(
+            alive_ips,
+            key=lambda ip: (
+                ipaddress.ip_address(ip).version,
+                int(ipaddress.ip_address(ip)),
+            ),
+        )
 
     def _scan_ports(self, hosts: List[str], port_range: str) -> List[ScanResult]:
         """Scan ports on each alive host and build ScanResults.
