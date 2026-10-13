@@ -5,6 +5,33 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+- `NetworkScanner` now floors its thread count at 1 (matching
+  `PortScanner`/`UDPScanner`): `threads=0` or a negative count (e.g.
+  CLI `--threads 0`) previously reached `ThreadPoolExecutor` unclamped
+  and crashed `scan()` with `ValueError: max_workers must be greater
+  than 0`
+- CSV export of an empty result set now writes a header-only file
+  instead of writing nothing while `save()` reported success
+- The CLI no longer prints "Results saved" when the export failed:
+  `NetworkScanner.save_results` returns the handler's outcome and
+  `main.py` logs an error on failure
+- `NetworkInterruptor.jam_channel` validates channel (integer, 1-196)
+  and duration before building the `mdk3` command line, mirroring
+  `_generate_hostapd_config`; a non-integer channel string could
+  previously reach the subprocess argv verbatim and be parsed as an
+  option
+- GUI: a malformed target network is now reported as invalid instead
+  of triggering the non-private-target legal warning, and activity-log
+  messages are HTML-escaped before being rendered as rich text
+
+### Added
+- 11 new unit tests: thread-count clamping and `save_results` outcome
+  propagation, empty/non-empty CSV export, and `jam_channel` channel
+  validation — suite now 83 tests
+
 ## [0.3.2] - 2026-10-11
 
 ### Added
