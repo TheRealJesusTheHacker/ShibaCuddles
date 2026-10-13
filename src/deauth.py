@@ -573,6 +573,17 @@ class NetworkInterruptor:
         if not 1 <= channel <= 196:
             self.logger.error(f"jam_channel: channel out of WiFi range: {channel}")
             return False
+        if duration < 1:
+            # A non-positive duration is not a no-op: the backstop
+            # wrapper is invoked as `timeout <duration + 5>`, and
+            # `timeout 0` DISABLES the backstop entirely, while the
+            # negative sleep afterwards raises only after mdk3 has
+            # already been spawned. Refuse before spawning anything.
+            self.logger.error(
+                f"jam_channel: duration must be at least 1 second, "
+                f"got {duration}"
+            )
+            return False
         self.logger.warning(f"Jamming channel {channel} for {duration} seconds")
         self.logger.warning(
             "This is a network disruption attack - use only for authorized testing"
