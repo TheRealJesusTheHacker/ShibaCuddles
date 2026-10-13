@@ -87,11 +87,14 @@ class ResultsHandler:
         with open(filepath, "w", encoding="utf-8") as f:
             json.dump(results_dict, f, indent=2)
 
+    # CSV columns, in order. Fixed rather than derived from the first
+    # row, so an empty result set still exports a valid header-only CSV:
+    # previously _save_csv returned early on empty results and save()
+    # reported success while writing no file at all.
+    _CSV_FIELDS = ["ip", "alive", "open_ports", "port_count", "scan_time"]
+
     def _save_csv(self, results: List, filepath: str) -> None:
         """Save results as CSV."""
-        if not results:
-            return
-
         rows = []
         for result in results:
             if hasattr(result, "__dataclass_fields__"):
@@ -108,11 +111,10 @@ class ResultsHandler:
             }
             rows.append(flat_row)
 
-        if rows:
-            with open(filepath, "w", newline="", encoding="utf-8") as f:
-                writer = csv.DictWriter(f, fieldnames=rows[0].keys())
-                writer.writeheader()
-                writer.writerows(rows)
+        with open(filepath, "w", newline="", encoding="utf-8") as f:
+            writer = csv.DictWriter(f, fieldnames=self._CSV_FIELDS)
+            writer.writeheader()
+            writer.writerows(rows)
 
     def _save_xml(self, results: List, filepath: str) -> None:
         """Save results as XML."""
