@@ -3,6 +3,7 @@ High-performance port scanner module.
 Implements TCP connection scanning with threading and optimization.
 """
 
+import ipaddress
 import logging
 import socket
 import threading
@@ -187,6 +188,38 @@ class PortScanner:
                     pass
 
 
+def _udp_source_matches(addr, host: str, port: int) -> bool:
+    """True if a UDP reply came from the probed target (host AND port).
+
+    An unconnected UDP socket's recvfrom() accepts a datagram from ANY
+    sender that reaches the ephemeral port, so without this check a
+    stray packet (another host, or another service on the same host)
+    marks the probed port "open" -- a false positive. The reply must
+    come from an address ``host`` resolves to, from the probed port.
+    """
+    if not addr or addr[1] != port:
+        return False
+    try:
+        source = ipaddress.ip_address(addr[0])
+    except ValueError:
+        return False
+    try:
+        return source == ipaddress.ip_address(host)
+    except ValueError:
+        pass  # host is a hostname: compare against its resolved addresses
+    try:
+        infos = socket.getaddrinfo(host, port, type=socket.SOCK_DGRAM)
+    except (socket.gaierror, UnicodeError):
+        return False
+    for info in infos:
+        try:
+            if ipaddress.ip_address(info[4][0]) == source:
+                return True
+        except ValueError:
+            continue
+    return False
+
+
 class UDPScanner:
     """
     UDP port scanner for service discovery.
@@ -232,10 +265,13 @@ class UDPScanner:
             # Send empty UDP packet
             sock.sendto(b"", (host, port))
 
-            # Try to receive response
+            # Try to receive response. Only a reply from the probed
+            # target (host + port) counts: the socket is unconnected,
+            # so recvfrom would otherwise accept any stray datagram
+            # that reaches this ephemeral port as proof of "open".
             try:
-                sock.recvfrom(1024)
-                return True
+                _, addr = sock.recvfrom(1024)
+                return _udp_source_matches(addr, host, port)
             except socket.timeout:
                 # No response could mean open or filtered
                 return False
