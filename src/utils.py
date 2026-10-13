@@ -77,6 +77,16 @@ def parse_port_spec(port_spec: str) -> List[int]:
     Raises:
         ValueError: If port spec is invalid
     """
+    # Memoized: PortScanner.scan() re-parses the spec for every host, and
+    # a full-range parse ("1-65535") costs ~20 ms -- across a /24 that was
+    # ~5 s of pure re-parsing per scan. The cached value is an immutable
+    # tuple; each caller gets a fresh list copy it may freely mutate.
+    return list(_parse_port_spec_cached(port_spec))
+
+
+@lru_cache(maxsize=128)
+def _parse_port_spec_cached(port_spec: str) -> tuple:
+    """Worker for parse_port_spec; returns the ports as a sorted tuple."""
     ports = set()
 
     for segment in port_spec.split(","):
@@ -107,7 +117,26 @@ def parse_port_spec(port_spec: str) -> List[int]:
             except ValueError as e:
                 raise ValueError(f"Invalid port: {segment}") from e
 
-    return sorted(list(ports))
+    return tuple(sorted(ports))
+
+
+def clamp_threads(threads: int, maximum: int) -> int:
+    """
+    Clamp a worker-thread count to [1, maximum].
+
+    ThreadPoolExecutor raises ValueError for max_workers < 1, so every
+    scanner class floors its count at 1; each class keeps its own cap.
+    The clamp lived inline in three classes -- it is spelled out once
+    here so the floor/cap logic cannot drift between them again.
+
+    Args:
+        threads: Requested thread count
+        maximum: Per-class cap
+
+    Returns:
+        The clamped thread count
+    """
+    return max(1, min(threads, maximum))
 
 
 def format_elapsed_time(seconds: float) -> str:
