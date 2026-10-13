@@ -245,10 +245,14 @@ def main():
         if not args.quiet:
             scanner.print_results(results)
 
-        # Save results if output file specified
+        # Save results if output file specified. ResultsHandler.save
+        # reports failure via its return value (and its own error log);
+        # don't claim success here when the write actually failed.
         if args.output:
-            scanner.save_results(results, args.output, args.format, args.force)
-            logger.info(f"Results saved to {args.output}")
+            if scanner.save_results(results, args.output, args.format, args.force):
+                logger.info(f"Results saved to {args.output}")
+            else:
+                logger.error(f"Results were NOT saved to {args.output}")
 
         return 0
 

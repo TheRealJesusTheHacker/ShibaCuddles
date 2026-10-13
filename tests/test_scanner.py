@@ -173,5 +173,40 @@ class TestDetectServicesNoNestedPool(unittest.TestCase):
         self.assertEqual(out[0].services, {})
 
 
+class TestThreadCountClamping(unittest.TestCase):
+    """NetworkScanner must floor the thread count at 1 like its sibling
+    classes: ThreadPoolExecutor raises ValueError for max_workers < 1,
+    so threads=0 (reachable via CLI --threads 0) crashed scan()."""
+
+    def test_zero_threads_clamped_to_one(self):
+        scanner = NetworkScanner(network="127.0.0.0/30", threads=0, timeout=0.5)
+        self.assertEqual(scanner.threads, 1)
+
+    def test_negative_threads_clamped_to_one(self):
+        scanner = NetworkScanner(network="127.0.0.0/30", threads=-5, timeout=0.5)
+        self.assertEqual(scanner.threads, 1)
+
+    def test_huge_thread_count_still_capped(self):
+        scanner = NetworkScanner(network="127.0.0.0/30", threads=10000, timeout=0.5)
+        self.assertEqual(scanner.threads, 64)
+
+    def test_scan_with_zero_thread_arg_completes(self):
+        scanner = _scanner(threads=0)
+        scanner.device_discovery.is_alive = lambda ip: True
+
+        results = scanner.scan("22")
+
+        self.assertEqual(len(results), 2)
+
+    def test_save_results_returns_handler_outcome(self):
+        scanner = _scanner()
+        scanner.results_handler = MagicMock()
+        scanner.results_handler.save.return_value = False
+
+        self.assertFalse(scanner.save_results([], "x.json", "json"))
+        scanner.results_handler.save.return_value = True
+        self.assertTrue(scanner.save_results([], "x.json", "json"))
+
+
 if __name__ == "__main__":
     unittest.main()

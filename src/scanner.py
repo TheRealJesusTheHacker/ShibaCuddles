@@ -85,7 +85,11 @@ class NetworkScanner:
                 cooperatively at the next checkpoint and returns partial results
         """
         self.network = network
-        self.threads = min(threads, 64)  # Cap at 64 threads
+        # Floor of 1 as well as the cap: ThreadPoolExecutor raises
+        # ValueError for max_workers < 1, so an unclamped threads=0
+        # (e.g. CLI --threads 0) crashed scan() instead of scanning.
+        # PortScanner/UDPScanner already clamp with max(1, ...) -- match.
+        self.threads = max(1, min(threads, 64))
         self.timeout = max(0.2, timeout)  # Minimum 0.2 seconds (sub-second allowed)
         self.rate_limit = max(0.0, rate_limit)
         self.batch_size = max(10, batch_size)
@@ -435,9 +439,9 @@ class NetworkScanner:
         filepath: str,
         format: str = "json",
         force: bool = False,
-    ) -> None:
-        """Save results to file."""
-        self.results_handler.save(results, filepath, format, force)
+    ) -> bool:
+        """Save results to file. Returns True if the file was written."""
+        return self.results_handler.save(results, filepath, format, force)
 
     def _format_statistics(self) -> str:
         """Format scan statistics."""
