@@ -3,6 +3,7 @@ ShibaCuddles GUI - Main Window
 PyQt6-based graphical interface for network scanning and security testing.
 """
 
+import html
 import sys
 import threading
 from datetime import datetime
@@ -42,6 +43,7 @@ import logging
 
 from src.results_handler import ResultsHandler
 from src.scanner import NetworkScanner
+from src.utils import validate_network
 
 try:
     from src import __version__ as _APP_VERSION
@@ -645,9 +647,12 @@ class ShibaCuddlesGUI(QMainWindow):
         ts = datetime.now().strftime("%H:%M:%S")
         colors = {"info": "#9aa3b2", "ok": _ACCENT, "error": _DANGER, "warn": "#f0b429"}
         color = colors.get(level, colors["info"])
+        # QTextEdit.append renders rich text: escape the message (which
+        # can embed the typed target, file paths, and exception text) so
+        # it is always shown literally, never interpreted as markup.
         self.log_text.append(
             f'<span style="color:#5c6575;">[{ts}]</span> '
-            f'<span style="color:{color};">{message}</span>'
+            f'<span style="color:{color};">{html.escape(message)}</span>'
         )
 
     # ------------------------------------------------------------------
@@ -665,6 +670,19 @@ class ShibaCuddlesGUI(QMainWindow):
                 self,
                 "Missing Target",
                 "Please enter a target network in CIDR notation.",
+            )
+            return
+
+        # Validate the format first: _is_private_target returns False
+        # for unparseable input, so without this check a typo'd target
+        # was misreported as a non-private network (legal warning)
+        # instead of simply being invalid.
+        if not validate_network(network):
+            QMessageBox.warning(
+                self,
+                "Invalid Target",
+                f"'{network}' is not a valid network in CIDR notation "
+                "(e.g. 192.168.1.0/24).",
             )
             return
 
