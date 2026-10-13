@@ -15,7 +15,19 @@ from .device import DeviceDiscovery
 from .port_scanner import PortScanner
 from .results_handler import ResultsHandler
 from .service_detector import ServiceDetector
-from .utils import format_elapsed_time, parse_port_spec
+from .utils import clamp_threads, format_elapsed_time, parse_port_spec
+
+
+def _ip_sort_key(ip: str):
+    """Numeric sort key for an IP string: (address version, integer value).
+
+    Version-first ordering keeps IPv4 and IPv6 blocks separate without
+    raising on mixed input. Parses the address once -- the previous
+    inline key parsed it twice per host, which cost seconds on
+    /16-scale discovery result sets.
+    """
+    addr = ipaddress.ip_address(ip)
+    return (addr.version, int(addr))
 
 
 @dataclass
@@ -88,8 +100,9 @@ class NetworkScanner:
         # Floor of 1 as well as the cap: ThreadPoolExecutor raises
         # ValueError for max_workers < 1, so an unclamped threads=0
         # (e.g. CLI --threads 0) crashed scan() instead of scanning.
-        # PortScanner/UDPScanner already clamp with max(1, ...) -- match.
-        self.threads = max(1, min(threads, 64))
+        # The clamp logic is shared (utils.clamp_threads); the cap of
+        # 64 here vs 100 in PortScanner/UDPScanner is per-class.
+        self.threads = clamp_threads(threads, 64)
         self.timeout = max(0.2, timeout)  # Minimum 0.2 seconds (sub-second allowed)
         self.rate_limit = max(0.0, rate_limit)
         self.batch_size = max(10, batch_size)
@@ -285,15 +298,8 @@ class NetworkScanner:
                     self._report_progress(completed, total)
 
         # Numeric sort (not lexicographic): without this, "192.168.1.10"
-        # sorts before "192.168.1.2". Version-first ordering keeps IPv4
-        # and IPv6 blocks separate without raising on mixed input.
-        return sorted(
-            alive_ips,
-            key=lambda ip: (
-                ipaddress.ip_address(ip).version,
-                int(ipaddress.ip_address(ip)),
-            ),
-        )
+        # sorts before "192.168.1.2".
+        return sorted(alive_ips, key=_ip_sort_key)
 
     def _scan_ports(self, hosts: List[str], port_range: str) -> List[ScanResult]:
         """Scan ports on each alive host and build ScanResults.
