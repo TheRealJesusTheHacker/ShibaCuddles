@@ -5,11 +5,24 @@ Results handler for exporting scan results in multiple formats.
 import csv
 import json
 import logging
+import re
 import xml.dom.minidom as minidom
 import xml.etree.ElementTree as ET
 from dataclasses import asdict
 from pathlib import Path
 from typing import List
+
+# Characters XML 1.0 forbids outright. Banners come from the network and
+# are decoded with errors="ignore", which keeps legal-but-unprintable
+# bytes (NUL, VT, unit separators, ...); a version string carrying one
+# made the whole XML export fail ("not well-formed") while the JSON/TXT
+# exports of the same results succeeded.
+_XML_FORBIDDEN = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]")
+
+
+def _xml_safe(value) -> str:
+    """Stringify a value with XML-1.0-forbidden characters removed."""
+    return _XML_FORBIDDEN.sub("", str(value))
 
 
 class ResultsHandler:
@@ -102,11 +115,12 @@ class ResultsHandler:
             else:
                 result_dict = result
 
+            open_ports = result_dict.get("open_ports") or []
             flat_row = {
                 "ip": result_dict.get("ip", ""),
                 "alive": result_dict.get("alive", ""),
-                "open_ports": ",".join(map(str, result_dict.get("open_ports", []))),
-                "port_count": len(result_dict.get("open_ports", [])),
+                "open_ports": ",".join(map(str, open_ports)),
+                "port_count": len(open_ports),
                 "scan_time": result_dict.get("scan_time", ""),
             }
             rows.append(flat_row)
@@ -130,27 +144,31 @@ class ResultsHandler:
                 result_dict = result
 
             host_elem = ET.SubElement(scan_results, "Host")
-            host_elem.set("ip", str(result_dict.get("ip", "")))
-            host_elem.set("alive", str(result_dict.get("alive", "")))
+            host_elem.set("ip", _xml_safe(result_dict.get("ip", "")))
+            host_elem.set("alive", _xml_safe(result_dict.get("alive", "")))
 
             open_ports_elem = ET.SubElement(host_elem, "OpenPorts")
-            for port in result_dict.get("open_ports", []):
+            for port in result_dict.get("open_ports") or []:
                 port_elem = ET.SubElement(open_ports_elem, "Port")
-                port_elem.text = str(port)
+                port_elem.text = _xml_safe(port)
 
             services = result_dict.get("services", {})
             if services:
                 services_elem = ET.SubElement(host_elem, "Services")
                 for port, service_info in services.items():
                     service_elem = ET.SubElement(services_elem, "Service")
-                    service_elem.set("port", str(port))
-                    service_elem.set("name", service_info.get("name", "Unknown"))
+                    service_elem.set("port", _xml_safe(port))
+                    service_elem.set(
+                        "name", _xml_safe(service_info.get("name", "Unknown"))
+                    )
                     if service_info.get("version"):
-                        service_elem.set("version", service_info["version"])
+                        service_elem.set(
+                            "version", _xml_safe(service_info["version"])
+                        )
 
             if result_dict.get("scan_time"):
                 time_elem = ET.SubElement(host_elem, "ScanTime")
-                time_elem.text = str(result_dict["scan_time"])
+                time_elem.text = _xml_safe(result_dict["scan_time"])
 
         xml_str = minidom.parseString(ET.tostring(root)).toprettyxml(indent="  ")
         with open(filepath, "w", encoding="utf-8") as f:
@@ -172,7 +190,7 @@ class ResultsHandler:
                 f.write(f"Host: {result_dict.get('ip', 'Unknown')}\n")
                 f.write(f"Status: {'ALIVE' if result_dict.get('alive') else 'DEAD'}\n")
 
-                open_ports = result_dict.get("open_ports", [])
+                open_ports = result_dict.get("open_ports") or []
                 ports_str = ", ".join(map(str, open_ports)) if open_ports else "None"
                 f.write(f"Open Ports: {ports_str}\n")
 
