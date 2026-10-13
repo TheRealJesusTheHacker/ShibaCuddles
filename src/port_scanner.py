@@ -10,7 +10,14 @@ import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import List, Optional
 
-from .utils import create_socket
+from .utils import clamp_threads, create_socket, parse_port_spec
+
+# Maximum number of probe futures in flight at once. Submitting an
+# entire port spec up front (65,535 futures for a full-range scan) held
+# ~116 MB of futures + as_completed waiters in memory before the first
+# result arrived; a bounded window keeps results identical with a flat
+# memory profile. Matches the chunk size NetworkScanner discovery uses.
+_SUBMIT_WINDOW = 1024
 
 
 class PortScanner:
@@ -44,11 +51,10 @@ class PortScanner:
             stop_event: Optional threading.Event; when set, an in-progress
                 scan aborts cooperatively at the next checkpoint
         """
-        self.threads = max(1, min(threads, 100))
+        self.threads = clamp_threads(threads, 100)
         self.timeout = max(0.1, timeout)
         self.rate_limit = max(0.0, rate_limit)
         self.logger = logger or logging.getLogger(__name__)
-        self.lock = threading.Lock()
         self.stop_event = stop_event or threading.Event()
 
     def _should_stop(self) -> bool:
@@ -66,8 +72,6 @@ class PortScanner:
         Returns:
             List of open ports
         """
-        from .utils import parse_port_spec
-
         try:
             ports = parse_port_spec(port_spec)
         except ValueError as e:
@@ -75,25 +79,33 @@ class PortScanner:
             return []
 
         open_ports = []
+        futures = {}
 
         with ThreadPoolExecutor(max_workers=self.threads) as executor:
-            futures = {
-                executor.submit(self._check_port, host, port): port for port in ports
-            }
-
             try:
-                for future in as_completed(futures):
+                # Submit in bounded windows (see _SUBMIT_WINDOW) rather
+                # than queueing the whole spec up front.
+                for chunk_start in range(0, len(ports), _SUBMIT_WINDOW):
                     if self._should_stop():
-                        for f in futures:
-                            f.cancel()
                         break
-                    port = futures[future]
-                    try:
-                        if future.result():
-                            open_ports.append(port)
-                            self.logger.debug(f"{host}:{port} is OPEN")
-                    except Exception as e:
-                        self.logger.debug(f"Error scanning {host}:{port}: {e}")
+                    chunk = ports[chunk_start : chunk_start + _SUBMIT_WINDOW]
+                    futures = {
+                        executor.submit(self._check_port, host, port): port
+                        for port in chunk
+                    }
+
+                    for future in as_completed(futures):
+                        if self._should_stop():
+                            for f in futures:
+                                f.cancel()
+                            break
+                        port = futures[future]
+                        try:
+                            if future.result():
+                                open_ports.append(port)
+                                self.logger.debug(f"{host}:{port} is OPEN")
+                        except Exception as e:
+                            self.logger.debug(f"Error scanning {host}:{port}: {e}")
             except KeyboardInterrupt:
                 # Abort promptly: drop everything still queued so the pool
                 # teardown doesn't first run thousands of pending probes.
@@ -197,7 +209,7 @@ class UDPScanner:
             stop_event: Optional threading.Event for cooperative stop
         """
         self.timeout = max(0.1, timeout)
-        self.threads = max(1, min(threads, 100))
+        self.threads = clamp_threads(threads, 100)
         self.logger = logger or logging.getLogger(__name__)
         self.stop_event = stop_event or threading.Event()
 
@@ -250,25 +262,31 @@ class UDPScanner:
             List of ports with responses
         """
         open_ports = []
+        futures = {}
 
         with ThreadPoolExecutor(max_workers=self.threads) as executor:
-            futures = {
-                executor.submit(self._check_udp_port, host, port): port
-                for port in ports
-            }
-
             try:
-                for future in as_completed(futures):
+                # Bounded submission windows, same as the TCP scan above.
+                for chunk_start in range(0, len(ports), _SUBMIT_WINDOW):
                     if self.stop_event.is_set():
-                        for f in futures:
-                            f.cancel()
                         break
-                    port = futures[future]
-                    try:
-                        if future.result():
-                            open_ports.append(port)
-                    except Exception as e:
-                        self.logger.debug(f"UDP scan error on {host}:{port}: {e}")
+                    chunk = ports[chunk_start : chunk_start + _SUBMIT_WINDOW]
+                    futures = {
+                        executor.submit(self._check_udp_port, host, port): port
+                        for port in chunk
+                    }
+
+                    for future in as_completed(futures):
+                        if self.stop_event.is_set():
+                            for f in futures:
+                                f.cancel()
+                            break
+                        port = futures[future]
+                        try:
+                            if future.result():
+                                open_ports.append(port)
+                        except Exception as e:
+                            self.logger.debug(f"UDP scan error on {host}:{port}: {e}")
             except KeyboardInterrupt:
                 # Same as TCP scan above: drop the queued probes so abort
                 # is prompt; running probes are timeout-bounded and close
