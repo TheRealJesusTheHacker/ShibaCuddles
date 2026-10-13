@@ -77,6 +77,17 @@ def parse_port_spec(port_spec: str) -> List[int]:
     Raises:
         ValueError: If port spec is invalid
     """
+    # Non-string input is an invalid spec, not a crash: callers such as
+    # PortScanner.scan() catch ValueError (the documented contract) and
+    # treat the scan as empty, but the parser itself would raise
+    # AttributeError (no .split) or TypeError (unhashable, from the
+    # cache) and escape straight through them.
+    if not isinstance(port_spec, str):
+        raise ValueError(
+            f"Port specification must be a string, "
+            f"got {type(port_spec).__name__}"
+        )
+
     # Memoized: PortScanner.scan() re-parses the spec for every host, and
     # a full-range parse ("1-65535") costs ~20 ms -- across a /24 that was
     # ~5 s of pure re-parsing per scan. The cached value is an immutable
