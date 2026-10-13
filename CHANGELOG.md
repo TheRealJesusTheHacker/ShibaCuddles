@@ -7,6 +7,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed (round-2 bug hunt, 2026-10-13)
+- Service detection misidentified Apache and Nginx: the generic HTTP
+  `Server:` pattern ran before the product patterns and captured the
+  whole header value, so an Apache banner was reported as service
+  "HTTP" with version "Apache/2.4.49 (Unix)" — and version-based
+  consumers never saw the real product name. Product patterns
+  (SSH/Apache/Nginx) are now matched first
+- UDP scan counted any stray datagram reaching the probe socket as an
+  open port; a reply now only counts if it comes from the probed host
+  and port
+- `parse_port_spec` now raises `ValueError` (its documented contract)
+  for non-string input instead of leaking `AttributeError`/`TypeError`
+  through callers that only catch `ValueError`
+- `NetworkScanner(skip_broadcast=True)` silently erased a /32
+  single-host target (zero hosts scanned) and dropped the last host
+  of IPv6 ranges; the broadcast filter now applies only where a
+  distinct IPv4 broadcast address exists
+- `DeviceDiscovery.discover_subnet` gained the same 65,536-address
+  ceiling `NetworkScanner` enforces, instead of materializing an
+  unbounded host list
+- XML export no longer fails outright when a service version string
+  contains XML-forbidden control characters from a network banner;
+  CSV/TXT/XML exports also tolerate `open_ports=None` in dict results
+- `NetworkInterruptor.jam_channel` refuses non-positive durations
+  before spawning: `duration=-5` previously invoked the `timeout`
+  backstop as `timeout 0` (backstop disabled) and started mdk3
+- GUI: a blank Ports field now uses the default range it always
+  claimed to use, and an invalid port specification is reported in a
+  dialog instead of looking like a completed scan with zero results
+
 ### Fixed
 - `NetworkScanner` now floors its thread count at 1 (matching
   `PortScanner`/`UDPScanner`): `threads=0` or a negative count (e.g.
