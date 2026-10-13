@@ -121,10 +121,18 @@ class ScannerThread(QThread):
     def run(self):
         """Run the scan in background thread."""
         try:
+            last_pct = -1
 
             def _on_progress(done: int, total: int):
+                nonlocal last_pct
                 pct = int(done / max(total, 1) * 100)
-                self.progress.emit(pct)
+                # The engine reports per host (per ping in discovery): a
+                # /16 sweep would emit ~65k queued signals for at most 101
+                # distinct bar values and flood the GUI event queue.
+                # Emit only when the displayed percentage actually changes.
+                if pct != last_pct:
+                    last_pct = pct
+                    self.progress.emit(pct)
 
             scanner = NetworkScanner(
                 network=self.network,
