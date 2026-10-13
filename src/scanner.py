@@ -246,7 +246,17 @@ class NetworkScanner:
                 )
             hosts = list(network.hosts())
 
-            if self.skip_broadcast:
+            # Broadcast is an IPv4 concept and only exists as a distinct
+            # address on networks with 2+ addresses. Applying the filter
+            # unconditionally silently erased legitimate targets: a /32
+            # single-host scan returned ZERO hosts (its only address IS
+            # the "broadcast" address), and an IPv6 range lost its final
+            # host (IPv6 has no broadcast at all).
+            if (
+                self.skip_broadcast
+                and network.version == 4
+                and network.num_addresses > 1
+            ):
                 # Remove broadcast and network addresses
                 hosts = [
                     str(ip) for ip in hosts if str(ip) != str(network.broadcast_address)
