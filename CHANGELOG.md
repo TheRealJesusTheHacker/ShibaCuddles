@@ -27,10 +27,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   of triggering the non-private-target legal warning, and activity-log
   messages are HTML-escaped before being rendered as rich text
 
+### Performance
+- Port scans (TCP and UDP) now submit probes in bounded windows of
+  1,024 futures instead of queueing the entire port spec up front: a
+  full-range 1-65535 scan's peak traced memory dropped from ~116 MB to
+  ~7 MB with identical results, and stop/cancel now only ever holds one
+  window of queued probes
+- `parse_port_spec` is memoized: `PortScanner.scan()` re-parsed the
+  spec for every host (~22 ms per full-range parse, ~5.6 s across a
+  /24); repeat parses now cost ~1 ms
+- Discovery results are sorted with a single-parse key (the old key
+  parsed every address twice)
+- GUI progress signals are emitted only when the percentage changes,
+  instead of once per host (a /16 discovery phase could previously
+  queue ~65k signals for 101 distinct values)
+
+### Changed
+- Thread-count clamping now lives in one shared helper
+  (`utils.clamp_threads`); the per-class caps are unchanged
+  (NetworkScanner 64, PortScanner/UDPScanner 100). Removed the unused
+  `PortScanner.lock` attribute and a redundant deferred import
+
 ### Added
 - 11 new unit tests: thread-count clamping and `save_results` outcome
   propagation, empty/non-empty CSV export, and `jam_channel` channel
   validation — suite now 83 tests
+- 15 new regression tests for the performance pass: port-spec
+  memoization (including cache-poisoning resistance), the shared
+  thread clamp, windowed submission completeness/stop/cancel, and
+  numeric discovery ordering — suite now 98 tests
 
 ## [0.3.2] - 2026-10-11
 
