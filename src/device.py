@@ -178,6 +178,17 @@ class DeviceDiscovery:
 
         try:
             network = ipaddress.ip_network(subnet, strict=False)
+            # Same ceiling NetworkScanner enforces on its targets: the
+            # host list is materialized up front, so an unbounded CIDR
+            # (a typo'd /8 is 16.7M strings) hangs or OOMs the process
+            # instead of failing fast with a clear refusal.
+            if network.num_addresses > 65536:
+                self.logger.error(
+                    f"Subnet too large: {subnet} contains "
+                    f"{network.num_addresses:,} addresses, exceeding the "
+                    "65,536-address limit. Narrow the target range."
+                )
+                return []
             ips = [str(ip) for ip in network.hosts()]
             return self.discover(ips, resolve_hostname, resolve_mac)
 
