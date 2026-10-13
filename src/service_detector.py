@@ -193,8 +193,17 @@ class ServiceDetector:
             service_info["name"] = "Unknown"
             service_info["protocol"] = "tcp"
 
-        # Try to extract version
-        for service_name, pattern in self.VERSION_PATTERNS.items():
+        # Try to extract version. Product-specific patterns (SSH,
+        # Apache, Nginx) are tried BEFORE the generic HTTP pattern: the
+        # HTTP pattern captures the whole "Server:" header value, so if
+        # it ran first it would claim an Apache banner as name="HTTP",
+        # version="Apache/2.4.49 (Unix)" -- the product patterns would
+        # never match, and version-based consumers (e.g.
+        # VulnerabilityScanner) would never see the real product name.
+        ordered_patterns = sorted(
+            self.VERSION_PATTERNS.items(), key=lambda kv: kv[0] == "HTTP"
+        )
+        for service_name, pattern in ordered_patterns:
             match = pattern.search(banner)
             if match:
                 service_info["version"] = match.group(1)
