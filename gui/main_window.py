@@ -43,7 +43,7 @@ import logging
 
 from src.results_handler import ResultsHandler
 from src.scanner import NetworkScanner
-from src.utils import validate_network
+from src.utils import parse_port_spec, validate_network
 
 try:
     from src import __version__ as _APP_VERSION
@@ -669,7 +669,11 @@ class ShibaCuddlesGUI(QMainWindow):
     def start_scan(self):
         """Start network scan."""
         network = self.network_input.text().strip()
-        ports = self.port_input.text().strip()
+        # A blank ports field means the default range (the log line
+        # below has always called it "default"): without this, the
+        # engine received "", rejected it as an invalid spec, and the
+        # scan silently completed with zero hosts.
+        ports = self.port_input.text().strip() or "1-1024"
         threads = self.threads_spinner.value()
         timeout = self.timeout_spinner.value()
 
@@ -678,6 +682,21 @@ class ShibaCuddlesGUI(QMainWindow):
                 self,
                 "Missing Target",
                 "Please enter a target network in CIDR notation.",
+            )
+            return
+
+        # Validate the port spec here too: the engine only logs a bad
+        # spec (to a logger this window never shows) and returns no
+        # results, so without this check a typo looked exactly like a
+        # completed scan that found nothing.
+        try:
+            parse_port_spec(ports)
+        except ValueError as e:
+            QMessageBox.warning(
+                self,
+                "Invalid Ports",
+                f"'{ports}' is not a valid port specification "
+                f"(e.g. 1-1024, 80,443, 22-25).\n\n{e}",
             )
             return
 
@@ -715,7 +734,7 @@ class ShibaCuddlesGUI(QMainWindow):
         self.stop_button.setEnabled(True)
         self.progress_bar.setValue(0)
         self.statusBar().showMessage(f"Scanning {network} …")
-        self._log(f"Starting scan on {network} (ports {ports or 'default'})")
+        self._log(f"Starting scan on {network} (ports {ports})")
 
         self.scanner_thread = ScannerThread(
             network,
