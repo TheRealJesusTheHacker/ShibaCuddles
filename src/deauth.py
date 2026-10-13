@@ -555,6 +555,24 @@ class NetworkInterruptor:
             True if jamming started
         """
         require_scope_configured(action="jam_channel")
+        # Validate before building the mdk3 command line, mirroring
+        # _generate_hostapd_config: the channel reaches the subprocess
+        # argv verbatim, so a non-integer or out-of-range value (e.g. a
+        # string starting with "-") could be parsed as an mdk3 option
+        # instead of a channel. Duration feeds both the `timeout`
+        # wrapper and time.sleep, so coerce it once here too.
+        try:
+            channel = int(channel)
+            duration = int(duration)
+        except (TypeError, ValueError):
+            self.logger.error(
+                f"jam_channel: channel and duration must be integers, "
+                f"got channel={channel!r}, duration={duration!r}"
+            )
+            return False
+        if not 1 <= channel <= 196:
+            self.logger.error(f"jam_channel: channel out of WiFi range: {channel}")
+            return False
         self.logger.warning(f"Jamming channel {channel} for {duration} seconds")
         self.logger.warning(
             "This is a network disruption attack - use only for authorized testing"
@@ -571,7 +589,7 @@ class NetworkInterruptor:
                 [
                     "sudo",
                     "timeout",
-                    str(int(duration) + 5),
+                    str(duration + 5),
                     "mdk3",
                     interface,
                     "b",
