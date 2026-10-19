@@ -1,4 +1,4 @@
-# 🐕 ShibaCuddles — Advanced Network Scanner & Security Testing Suite
+# ShibaCuddles — Advanced Network Scanner & Security Testing Suite
 
 [![CI](https://github.com/TheRealJesusTheHacker/ShibaCuddles/actions/workflows/ci.yml/badge.svg)](https://github.com/TheRealJesusTheHacker/ShibaCuddles/actions/workflows/ci.yml)
 [![Release](https://img.shields.io/github/v/release/TheRealJesusTheHacker/ShibaCuddles)](https://github.com/TheRealJesusTheHacker/ShibaCuddles/releases)
@@ -7,9 +7,11 @@
 
 > **Because every network needs a cuddly scanner.**
 
+**Status:** Released — current version 0.3.2, as stated in the `VERSION` file (see also [CHANGELOG.md](CHANGELOG.md)). Runs on Windows and Linux with Python 3.8+; the WiFi testing modules additionally require Linux and the aircrack-ng suite.
+
 ---
 
-> ## ⚠️ AUTHORIZED USE ONLY
+> ## AUTHORIZED USE ONLY
 >
 > **ShibaCuddles is a security-testing tool. Use it only on networks you own
 > or have explicit, written permission to test.** Unauthorized scanning,
@@ -130,7 +132,7 @@ and interruptible. The WiFi modules are **not** exposed in the CLI or GUI;
 they are Python-API-only and every attack function refuses to run unless
 its target is allowlisted.
 
-## ✨ Features
+## Features
 
 ### Device discovery (`src/device.py`)
 
@@ -285,7 +287,7 @@ are fully supported on Windows.
   throughout, so scans stay interruptible.
 - **Output no-clobber** and **scope fail-closed** as described above.
 
-## ⬇️ Downloads
+## Downloads
 
 No Python needed — grab the latest standalone build from the
 [releases page](https://github.com/TheRealJesusTheHacker/ShibaCuddles/releases):
@@ -303,9 +305,9 @@ sha256sum -c SHA256SUMS-windows.txt   # Windows (Git Bash / WSL)
 sha256sum -c SHA256SUMS-linux.txt     # Linux
 ```
 
-> 📸 *Screenshot of the GUI dashboard coming soon.*
+> *Screenshot of the GUI dashboard coming soon.*
 
-## 📦 Installation
+## Installation
 
 Requires **Python 3.8+**.
 
@@ -330,7 +332,7 @@ sudo dnf install aircrack-ng       # Fedora
 brew install aircrack-ng           # macOS
 ```
 
-## 🖥️ CLI usage
+## CLI usage
 
 ```bash
 # Basic scan (ports 1-1024; ping sweep on by default)
@@ -407,7 +409,7 @@ python main.py 172.16.0.0/16 --threads 32 --ports 1-10000 --aggressive -vv
 ]
 ```
 
-## 🖥️ GUI usage
+## GUI usage
 
 ```bash
 python gui_launcher.py
@@ -429,7 +431,7 @@ traceback:
 pip install PyQt6 PyQt6-Charts
 ```
 
-## 🐍 Python API
+## Python API
 
 ```python
 from src.scanner import NetworkScanner
@@ -504,7 +506,7 @@ cp authorized_targets.example.json authorized_targets.json
 # WRITTEN permission to test
 ```
 
-## 🗂️ Project layout
+## Project layout
 
 - `main.py` — CLI entry point (argparse; RFC1918 confirmation gate)
 - `gui_launcher.py` — GUI entry point (friendly error if PyQt6 is missing)
@@ -527,16 +529,16 @@ cp authorized_targets.example.json authorized_targets.json
     address-family resolution, helpers
 - `gui/` — PyQt6 dashboard (`main_window.py`: header, config panel,
   results/statistics/log tabs, export, stop)
-- `tests/` — unit test suite (64 tests)
+- `tests/` — unit test suite (131 tests)
 - `authorized_targets.example.json` — scope-file template (copy to
   `authorized_targets.json`; gitignored)
 
-## 🧪 Development
+## Development
 
 ```bash
 pip install -r requirements-dev.txt
 
-# Run the test suite (64 tests)
+# Run the test suite (131 tests)
 python -m pytest tests/ -v
 
 # Format & lint (enforced in CI)
@@ -548,7 +550,7 @@ CI runs on every push/PR to `main`: byte-compile checks on Linux and
 Windows, the full pytest suite, `black --check`, and `ruff check` — all
 third-party GitHub Actions are pinned to commit SHAs.
 
-## 📦 Packaging & releases
+## Packaging & releases
 
 - `setup.py` — standard packaging (version read from the `VERSION` file).
   Installs `shiba-cuddles` and `shiba-cuddles-gui` console commands.
@@ -563,7 +565,7 @@ third-party GitHub Actions are pinned to commit SHAs.
   — so tagging `v*` effectively auto-publishes to PyPI. Disable or detach
   `publish-pypi.yml` before tagging if the release should NOT go to PyPI.
 
-## 🗺️ Roadmap (planned — not yet implemented)
+## Roadmap (planned — not yet implemented)
 
 - `config.yaml` default-settings loader (a sample is documented nowhere
   yet — the CLI is fully flag-driven today)
@@ -574,7 +576,7 @@ third-party GitHub Actions are pinned to commit SHAs.
   `VulnerabilityScanner` is an untested demo class)
 - Custom scan profiles and scheduled scans
 
-## 🔐 Security considerations
+## Security considerations
 
 - Always get **written permission** before scanning networks you don't own.
 - Comply with local laws and regulations.
@@ -585,7 +587,7 @@ third-party GitHub Actions are pinned to commit SHAs.
 - Found a vulnerability in ShibaCuddles itself? See [SECURITY.md](SECURITY.md)
   — report it privately, never as a public issue.
 
-## 🛠️ Troubleshooting
+## Troubleshooting
 
 | Issue | Fix |
 |---|---|
@@ -604,21 +606,21 @@ third-party GitHub Actions are pinned to commit SHAs.
 3. **Rate limiting** — reduce network load: `--rate-limit 0.1`
 4. **Timeout** — tune to your network: `--timeout 3`
 
-## 🤝 Contributing
+## Contributing
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines. The PR template
 includes an authorized-use checklist — scope gating must stay fail-closed.
 
-## 📄 License
+## License
 
 MIT License — see the [LICENSE](LICENSE) file for details.
 
-## 📬 Contact
+## Contact
 
 - **Business inquiries:** Sentinelsafeguard@outlook.com
 - **Security reports:** Sentinelsafeguard@outlook.com (see [SECURITY.md](SECURITY.md) — private disclosure only)
 
-## 💰 Donations
+## Donations
 
 If this tool earned its keep, BTC is welcome:
 
@@ -626,7 +628,7 @@ If this tool earned its keep, BTC is welcome:
 bc1qvydns2fmyjzj55wzxq7ta28nxdhcmu9l9m6yg0
 ```
 
-## ⚠️ Disclaimer
+## Disclaimer
 
 **ShibaCuddles is provided as-is for educational and authorized security
 testing purposes only.** Unauthorized access to computer systems is
