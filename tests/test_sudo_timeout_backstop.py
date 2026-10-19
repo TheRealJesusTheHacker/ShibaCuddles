@@ -47,7 +47,9 @@ class TestBroadcastDeauthBackstop(unittest.TestCase):
         run.return_value = _completed(124)
         d = _deauth()
         self.assertEqual(
-            d.deauthenticate_all_devices("AA:BB:CC:DD:EE:FF", "Lab", "wlan0mon", duration=30),
+            d.deauthenticate_all_devices(
+                "AA:BB:CC:DD:EE:FF", "Lab", "wlan0mon", duration=30
+            ),
             0,
         )
         argv = run.call_args.args[0]
