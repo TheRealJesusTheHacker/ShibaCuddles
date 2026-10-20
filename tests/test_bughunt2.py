@@ -101,33 +101,23 @@ class TestUDPSourceVerification(unittest.TestCase):
             return scanner.scan(host, [port])
 
     def test_reply_from_target_counts_open(self):
-        self.assertEqual(
-            self._scan_with_reply(("192.168.1.1", 53)), [53]
-        )
+        self.assertEqual(self._scan_with_reply(("192.168.1.1", 53)), [53])
 
     def test_reply_from_other_host_ignored(self):
         self.assertEqual(self._scan_with_reply(("10.9.9.9", 53)), [])
 
     def test_reply_from_wrong_port_ignored(self):
-        self.assertEqual(
-            self._scan_with_reply(("192.168.1.1", 9999)), []
-        )
+        self.assertEqual(self._scan_with_reply(("192.168.1.1", 9999)), [])
 
     def test_hostname_target_matches_resolved_address(self):
-        infos = [
-            (socket.AF_INET, socket.SOCK_DGRAM, 17, "", ("127.0.0.1", 53))
-        ]
+        infos = [(socket.AF_INET, socket.SOCK_DGRAM, 17, "", ("127.0.0.1", 53))]
         with patch("socket.getaddrinfo", return_value=infos):
             self.assertEqual(
-                self._scan_with_reply(
-                    ("127.0.0.1", 53), host="localhost", port=53
-                ),
+                self._scan_with_reply(("127.0.0.1", 53), host="localhost", port=53),
                 [53],
             )
             self.assertEqual(
-                self._scan_with_reply(
-                    ("127.0.0.2", 53), host="localhost", port=53
-                ),
+                self._scan_with_reply(("127.0.0.2", 53), host="localhost", port=53),
                 [],
             )
 
@@ -153,9 +143,7 @@ class TestSkipBroadcastTargets(unittest.TestCase):
 
     def test_normal_network_unaffected(self):
         scanner = NetworkScanner("192.168.1.0/30", skip_broadcast=True)
-        self.assertEqual(
-            scanner._get_target_hosts(), ["192.168.1.1", "192.168.1.2"]
-        )
+        self.assertEqual(scanner._get_target_hosts(), ["192.168.1.1", "192.168.1.2"])
 
 
 class TestDiscoverSubnetCap(unittest.TestCase):
@@ -167,21 +155,15 @@ class TestDiscoverSubnetCap(unittest.TestCase):
         with patch.object(
             DeviceDiscovery, "discover", return_value=[]
         ) as mock_discover:
-            result = discovery.discover_subnet(
-                "10.0.0.0/15", resolve_hostname=False
-            )
+            result = discovery.discover_subnet("10.0.0.0/15", resolve_hostname=False)
         self.assertEqual(result, [])
         mock_discover.assert_not_called()
 
     def test_normal_subnet_still_discovers(self):
         discovery = DeviceDiscovery(timeout=0.2)
-        with patch.object(
-            DeviceDiscovery, "is_alive", return_value=False
-        ):
+        with patch.object(DeviceDiscovery, "is_alive", return_value=False):
             self.assertEqual(
-                discovery.discover_subnet(
-                    "192.168.1.0/30", resolve_hostname=False
-                ),
+                discovery.discover_subnet("192.168.1.0/30", resolve_hostname=False),
                 [],
             )
 
@@ -215,9 +197,10 @@ class TestExportEdgeCases(unittest.TestCase):
     def test_csv_export_with_none_open_ports(self):
         path = self._path("out.csv")
         ok = self.handler.save(
-            [{"ip": "1.2.3.4", "alive": True, "open_ports": None,
-              "scan_time": 0.5}],
-            path, "csv", force=True,
+            [{"ip": "1.2.3.4", "alive": True, "open_ports": None, "scan_time": 0.5}],
+            path,
+            "csv",
+            force=True,
         )
         self.assertTrue(ok)
         lines = Path(path).read_text(encoding="utf-8").splitlines()
@@ -227,7 +210,9 @@ class TestExportEdgeCases(unittest.TestCase):
         path = self._path("out.txt")
         ok = self.handler.save(
             [{"ip": "1.2.3.4", "alive": True, "open_ports": None}],
-            path, "txt", force=True,
+            path,
+            "txt",
+            force=True,
         )
         self.assertTrue(ok)
         self.assertIn("Open Ports: None", Path(path).read_text("utf-8"))
