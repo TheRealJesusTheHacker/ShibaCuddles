@@ -1,9 +1,9 @@
 # ShibaCuddles — Advanced Network Scanner & Security Testing Suite
 
-[![CI](https://github.com/TheRealJesusTheHacker/ShibaCuddles/actions/workflows/ci.yml/badge.svg)](https://github.com/TheRealJesusTheHacker/ShibaCuddles/actions/workflows/ci.yml)
-[![Release](https://img.shields.io/github/v/release/TheRealJesusTheHacker/ShibaCuddles)](https://github.com/TheRealJesusTheHacker/ShibaCuddles/releases)
-[![License](https://img.shields.io/github/license/TheRealJesusTheHacker/ShibaCuddles)](https://github.com/TheRealJesusTheHacker/ShibaCuddles/blob/main/LICENSE)
-[![Python](https://img.shields.io/badge/python-3.8%2B-blue)](https://www.python.org/downloads/)
+[![CI](https://img.shields.io/github/actions/workflow/status/TheRealJesusTheHacker/ShibaCuddles/ci.yml?style=flat-square)](https://github.com/TheRealJesusTheHacker/ShibaCuddles/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/TheRealJesusTheHacker/ShibaCuddles?style=flat-square)](https://github.com/TheRealJesusTheHacker/ShibaCuddles/releases)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg?style=flat-square)](https://github.com/TheRealJesusTheHacker/ShibaCuddles/blob/main/LICENSE)
+[![Python](https://img.shields.io/badge/python-3.8%2B-blue?style=flat-square)](https://www.python.org/downloads/)
 
 > **Because every network needs a cuddly scanner.**
 
@@ -148,6 +148,10 @@ its target is allowlisted.
   normalized to lowercase colon-separated.
 - Discovery futures are submitted in chunks (1024 at a time) so a large
   range doesn't queue tens of thousands of ping subprocesses up front.
+- **Argv-injection guard** — `is_alive` and `get_mac_address` accept only
+  literal IP addresses (parsed with `ipaddress`); anything else — e.g. a
+  leading-`-` value that `ping`/`arp` would parse as an option instead of
+  a target — is refused before a process is spawned.
 
 ### Port scanning (`src/port_scanner.py`)
 
@@ -210,8 +214,12 @@ its target is allowlisted.
 
 ### WiFi security testing (`src/deauth.py` + `src/scope.py`) — Python API only
 
-Requires the `aircrack-ng` suite and Linux. **Every attack function is
-gated by `authorized_targets.json` — see the Authorized Use section.**
+Requires Linux, a monitor-mode-capable wireless adapter, and the
+`aircrack-ng` suite (`airmon-ng`, `airodump-ng`, `aireplay-ng`). Two
+functions need extra tools installed separately: `hostapd` for
+`create_rogue_ap` and `mdk3` for `jam_channel`; `analyze_traffic_patterns`
+needs `tcpdump`. **Every attack function is gated by
+`authorized_targets.json` — see the Authorized Use section.**
 
 On Windows (or without the suite installed), the module still imports
 cleanly: `WiFiDeauthenticator()` logs a warning and the Linux-only
@@ -245,6 +253,36 @@ are fully supported on Windows.
   symlink-planting risk when running under sudo) and deletes it after.
   **Packet-level analysis is not implemented yet** — it returns capture
   metadata with empty protocol breakdowns. Treat it as a capture stub.
+- **Interface-argument validation** — every function that places an
+  interface name in a tool's argv validates the shape first
+  (`_valid_interface`: an alphanumeric first character, then
+  alphanumerics / `.` / `_` / `-`, max 32 chars). A value outside that
+  shape — above all one starting with `-`, which the tool would parse as
+  an option rather than an interface in a sudo'd process — is refused
+  before anything spawns. This covers monitor mode on/off, the survey,
+  both deauthentication paths, rogue-AP creation (including the hostapd
+  config generator), channel jamming, and traffic capture. The MAC
+  addresses on the deauthentication paths are shape-validated the same
+  way (`_valid_mac`).
+- **`timeout` orphan backstops** — every long-running sudo'd tool runs
+  under GNU `timeout` in addition to the `subprocess` timeout, because
+  the run timeout alone kills only the `sudo` parent and would orphan
+  the tool itself: `airmon-ng` (8 s wrapper, 10 s run timeout),
+  `airodump-ng` (`duration + 5` s wrapper), finite `aireplay-ng` bursts
+  (25 s wrapper, 30 s run timeout), continuous broadcast deauth
+  (`duration` s wrapper — the only thing that ever stops `--deauth 0`),
+  `hostapd` (60 s wrapper, 75 s run timeout; wrapper exit 124 means it
+  served the full window), `mdk3` (`duration + 5` s wrapper, plus the
+  process handle is always terminated afterward), and `tcpdump` on
+  Linux (GNU `timeout` is not part of stock macOS, so macOS keeps the
+  run-timeout behavior alone).
+- **Channel & duration validation** — channels are coerced to `int` and
+  must be in range 1–196 (hostapd config generation and `jam_channel`).
+  Durations on the continuous paths (broadcast deauth, `jam_channel`,
+  traffic capture) are coerced and floored at 1 second *before* any
+  timeout arithmetic, because `timeout 0` would disable the backstop
+  entirely; non-integer or non-positive values are refused without
+  spawning anything.
 
 ### Authorization scope gate (`src/scope.py`)
 
@@ -257,6 +295,11 @@ are fully supported on Windows.
   directory, then `src/`, then the repo root.
 - SSID matching is case-sensitive; BSSIDs are normalized (lowercase,
   dashes→colons). A malformed scope file **fails closed**.
+- When a BSSID was observed, authorization is **pinned to it**: the
+  scope entry must carry that same BSSID, and an SSID-only match is not
+  accepted in that case (an evil twin can reuse an SSID). SSID-only
+  matching applies only when no BSSID was observed — e.g. rogue-AP
+  creation, where there is no AP BSSID yet.
 - Indiscriminate actions (channel jamming) use
   `require_scope_configured()`: they refuse to run unless the operator
   has deliberately set up a scope file at all.
@@ -271,7 +314,9 @@ are fully supported on Windows.
   Windows). All exports are written as UTF-8, explicitly — non-ASCII
   hostnames and service banners survive Windows' locale codepage.
 - **No-clobber default** — saving refuses to overwrite an existing file
-  unless you pass `--force` (CLI) / `force=True` (API).
+  unless you pass `--force` (CLI) / `force=True` (API). The existence
+  check uses `os.path.lexists`, so even a dangling symlink at the output
+  path counts as existing and is not written through without force.
 - `generate_report()` builds a human-readable summary (totals + per-host
   open ports) for pasting into reports.
 
@@ -331,6 +376,12 @@ sudo apt-get install aircrack-ng   # Ubuntu/Debian
 sudo dnf install aircrack-ng       # Fedora
 brew install aircrack-ng           # macOS
 ```
+
+WiFi testing additionally needs a wireless adapter that supports
+monitor mode, plus `sudo` and GNU `timeout` on Linux. The rogue-AP and
+channel-jamming functions need their own tools, installed separately
+(e.g. `sudo apt-get install hostapd mdk3 tcpdump` — `tcpdump` is used
+by the traffic-capture helper).
 
 ## CLI usage
 
@@ -529,7 +580,7 @@ cp authorized_targets.example.json authorized_targets.json
     address-family resolution, helpers
 - `gui/` — PyQt6 dashboard (`main_window.py`: header, config panel,
   results/statistics/log tabs, export, stop)
-- `tests/` — unit test suite (131 tests)
+- `tests/` — unit test suite (151 tests)
 - `authorized_targets.example.json` — scope-file template (copy to
   `authorized_targets.json`; gitignored)
 
@@ -538,7 +589,7 @@ cp authorized_targets.example.json authorized_targets.json
 ```bash
 pip install -r requirements-dev.txt
 
-# Run the test suite (131 tests)
+# Run the test suite (151 tests)
 python -m pytest tests/ -v
 
 # Format & lint (enforced in CI)
@@ -561,9 +612,14 @@ third-party GitHub Actions are pinned to commit SHAs.
   signed build-provenance attestations, and publishes the GitHub release.
   Publishing that release then fires the Publish-to-PyPI workflow
   (`.github/workflows/publish-pypi.yml`, on `release: published`), which
-  builds the sdist/wheel and uploads to PyPI via OIDC trusted publishing
-  — so tagging `v*` effectively auto-publishes to PyPI. Disable or detach
-  `publish-pypi.yml` before tagging if the release should NOT go to PyPI.
+  builds the sdist/wheel and uploads via OIDC trusted publishing.
+  **That path is not live yet:** as of 2026-10-20 PyPI has no
+  `shibacuddles` project (the PyPI JSON API returns 404) and the trusted
+  publisher is still owner-pending, so releases do **not** currently
+  land on PyPI and there is no `pip install shibacuddles` — install
+  from source as shown under Installation above. Disable or detach
+  `publish-pypi.yml` before tagging if a future release should NOT go
+  to PyPI once publishing is live.
 
 ## Roadmap (planned — not yet implemented)
 
@@ -613,7 +669,8 @@ includes an authorized-use checklist — scope gating must stay fail-closed.
 
 ## License
 
-MIT License — see the [LICENSE](LICENSE) file for details.
+MIT License — Copyright © 2023 JesusTheHacker. See the
+[LICENSE](LICENSE) file for the full text.
 
 ## Contact
 
