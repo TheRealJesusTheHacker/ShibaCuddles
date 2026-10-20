@@ -3,6 +3,7 @@ Device discovery module for network scanning.
 Implements ICMP and ARP-based host discovery.
 """
 
+import ipaddress
 import logging
 import math
 import platform
@@ -56,6 +57,18 @@ class DeviceDiscovery:
         Returns:
             True if host responds to ping, False otherwise
         """
+        # The address is the last element of the ping argv. A value
+        # starting with "-" (e.g. "-f", ping's flood mode) would be
+        # parsed as a ping OPTION instead of a target — there is no
+        # shell here, but argv is still an injection surface. Only
+        # literal IP addresses are valid targets for this API (every
+        # in-repo caller passes addresses parsed from a CIDR), so
+        # anything else is refused before a process is spawned.
+        try:
+            ipaddress.ip_address(ip)
+        except (ValueError, TypeError):
+            self.logger.debug(f"Refusing ping to non-IP target: {ip!r}")
+            return False
         try:
             # Platform-specific ping command
             if self.system == "windows":
@@ -103,6 +116,15 @@ class DeviceDiscovery:
         Returns:
             MAC address or None if not found
         """
+        # Same argv-injection guard as is_alive: the address is the
+        # last element of the arp argv, so a leading "-" would be
+        # parsed as an arp option instead of a target.
+        try:
+            ipaddress.ip_address(ip)
+        except (ValueError, TypeError):
+            self.logger.debug(f"Refusing ARP lookup for non-IP target: {ip!r}")
+            return None
+
         # Matches MACs with ':' or '-' separators on any platform, e.g.
         # Linux:   "192.168.1.1  ether  00:11:22:33:44:55  C  eth0"
         # Windows: "  192.168.1.1           00-11-22-33-44-55     dynamic"
