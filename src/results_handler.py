@@ -5,11 +5,11 @@ Results handler for exporting scan results in multiple formats.
 import csv
 import json
 import logging
+import os
 import re
 import xml.dom.minidom as minidom
 import xml.etree.ElementTree as ET
 from dataclasses import asdict
-from pathlib import Path
 from typing import List
 
 # Characters XML 1.0 forbids outright. Banners come from the network and
@@ -54,7 +54,15 @@ class ResultsHandler:
             True if successful, False otherwise
         """
         try:
-            if not force and Path(filepath).exists():
+            # lexists, not exists: exists() follows symlinks, so a
+            # planted DANGLING symlink at the output path read as "no
+            # file there" and the writers below followed the link —
+            # creating (or, for an existing target, the exists() check
+            # was the only guard) the link's target despite
+            # force=False. lexists sees the link itself. (A check-then-
+            # open race remains in principle; closing it fully would
+            # require reworking every writer to fd-based O_EXCL opens.)
+            if not force and os.path.lexists(str(filepath)):
                 raise FileExistsError(
                     f"Refusing to overwrite existing file: {filepath} "
                     "(pass force=True or use --force to overwrite)"
