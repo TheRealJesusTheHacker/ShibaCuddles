@@ -8,6 +8,7 @@ import atexit
 import logging
 import os
 import platform
+import re
 import secrets
 import shutil
 import subprocess
@@ -20,6 +21,28 @@ try:
     from .scope import require_authorized, require_scope_configured
 except ImportError:  # module executed as a top-level script
     from scope import require_authorized, require_scope_configured
+
+
+# Kernel interface names (IFNAMSIZ is 16 bytes including the NUL, and
+# tools add suffixes like "mon"): an alphanumeric first character plus
+# alphanumerics / "." / "_" / "-", capped at 32. Anything outside this
+# shape — above all a LEADING "-" — placed in the positional interface
+# slot of a tool's argv is parsed by that tool as another OPTION, not
+# as an interface (option injection into a sudo'd process). jam_channel
+# already validates its channel for exactly this reason; the interface
+# argument reaches the same argv vectors and gets the same treatment.
+_INTERFACE_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,31}")
+_MAC_RE = re.compile(r"[0-9A-Fa-f]{2}([:-][0-9A-Fa-f]{2}){5}")
+
+
+def _valid_interface(interface) -> bool:
+    """True if ``interface`` is shaped like a real interface name."""
+    return isinstance(interface, str) and bool(_INTERFACE_RE.fullmatch(interface))
+
+
+def _valid_mac(mac) -> bool:
+    """True if ``mac`` is a colon/dash-separated 48-bit MAC address."""
+    return isinstance(mac, str) and bool(_MAC_RE.fullmatch(mac))
 
 
 @dataclass
@@ -97,15 +120,27 @@ class WiFiDeauthenticator:
             self.logger.error("Monitor mode setup is only supported on Linux")
             return False
 
+        if not _valid_interface(interface):
+            self.logger.error(f"Invalid interface name: {interface!r}")
+            return False
+
         try:
+            # Both airmon-ng calls carry the `timeout` orphan backstop
+            # used by every other sudo'd tool path in this module: the
+            # run-level timeout alone kills only the sudo parent, and a
+            # wedged airmon-ng (a shell script with children of its own)
+            # would be orphaned. The wrapper's 8s sits inside the
+            # run-level 10s budget, mirroring the other paths.
             # Kill interfering processes
             subprocess.run(
-                ["sudo", "airmon-ng", "check", "kill"], capture_output=True, timeout=10
+                ["sudo", "timeout", "8", "airmon-ng", "check", "kill"],
+                capture_output=True,
+                timeout=10,
             )
 
             # Enable monitor mode
             result = subprocess.run(
-                ["sudo", "airmon-ng", "start", interface],
+                ["sudo", "timeout", "8", "airmon-ng", "start", interface],
                 capture_output=True,
                 text=True,
                 timeout=10,
@@ -138,21 +173,41 @@ class WiFiDeauthenticator:
         if self.system != "linux":
             return False
 
+        if not _valid_interface(interface):
+            self.logger.error(f"Invalid interface name: {interface!r}")
+            return False
+
         try:
-            # Disable monitor mode
-            subprocess.run(
-                ["sudo", "airmon-ng", "stop", interface],
+            # Disable monitor mode. The airmon-ng call carries the same
+            # `timeout` orphan backstop as every other sudo'd tool path
+            # in this module (see enable_monitor_mode).
+            result = subprocess.run(
+                ["sudo", "timeout", "8", "airmon-ng", "stop", interface],
                 capture_output=True,
                 text=True,
                 timeout=10,
             )
 
-            # Restart networking
+            # Restart networking (best effort). Deliberately NOT
+            # timeout-wrapped: systemctl is a client asking systemd to
+            # perform the restart — there is no orphanable payload, the
+            # run-level timeout bounds the client, and a wrapper firing
+            # mid-restart could leave networking half-restarted.
             subprocess.run(
                 ["sudo", "systemctl", "restart", "networking"],
                 capture_output=True,
                 timeout=10,
             )
+
+            if result.returncode != 0:
+                # Previously the stop result was discarded and success
+                # was reported unconditionally — a failed stop left the
+                # interface in monitor mode while claiming otherwise.
+                self.logger.error(
+                    f"Failed to disable monitor mode on {interface}: "
+                    f"{result.stderr}"
+                )
+                return False
 
             self.logger.info(f"Monitor mode disabled on {interface}")
             return True
@@ -202,6 +257,10 @@ class WiFiDeauthenticator:
         """
         if self.system != "linux":
             self.logger.error("WiFi scanning is only supported on Linux")
+            return []
+
+        if not _valid_interface(interface):
+            self.logger.error(f"Invalid interface name: {interface!r}")
             return []
 
         try:
@@ -323,6 +382,20 @@ class WiFiDeauthenticator:
             self.logger.error("Deauthentication is only supported on Linux")
             return False
 
+        # Validate everything that reaches the aireplay-ng argv before
+        # spawning a sudo'd process with it: malformed MACs are refused
+        # outright, and an interface outside the interface-name shape
+        # would be parsed as an aireplay-ng option (option injection).
+        if not _valid_mac(target.gateway_mac) or not _valid_mac(target.mac_address):
+            self.logger.error(
+                f"Invalid MAC address: gateway={target.gateway_mac!r}, "
+                f"device={target.mac_address!r}"
+            )
+            return False
+        if not _valid_interface(target.interface):
+            self.logger.error(f"Invalid interface name: {target.interface!r}")
+            return False
+
         self.logger.warning(
             f"LEGAL WARNING: Deauthenticating {target.mac_address} on {target.ssid}. "
             f"Ensure you have permission to perform this action."
@@ -424,6 +497,13 @@ class WiFiDeauthenticator:
                 f"1 second, got {duration}"
             )
             return 0
+        # Same argv validation as deauthenticate_device (see there).
+        if not _valid_mac(gateway_mac):
+            self.logger.error(f"Invalid MAC address: gateway={gateway_mac!r}")
+            return 0
+        if not _valid_interface(interface):
+            self.logger.error(f"Invalid interface name: {interface!r}")
+            return 0
 
         self.logger.warning(
             f"LEGAL WARNING: Broadcasting deauthentication frames to all "
@@ -435,7 +515,7 @@ class WiFiDeauthenticator:
             # the orphan backstop (see scan_nearby_networks): it, not
             # subprocess.run's kill of the sudo parent, is what stops
             # the continuous "--deauth 0" stream after `duration`.
-            subprocess.run(
+            result = subprocess.run(
                 [
                     "sudo",
                     "timeout",
@@ -452,7 +532,20 @@ class WiFiDeauthenticator:
                 timeout=duration + 10,
             )
 
-            self.logger.info(f"Broadcast deauthentication completed on {ssid}")
+            # The return contract is "0 always", but the LOG must not
+            # claim completion when aireplay-ng failed outright (bad
+            # interface, driver refusal): previously the result was
+            # discarded and success was logged unconditionally. Exit
+            # 124 is the wrapper ending the continuous stream after the
+            # full window — that, and 0, are the success shapes.
+            if result.returncode in (0, 124):
+                self.logger.info(f"Broadcast deauthentication completed on {ssid}")
+            else:
+                self.logger.error(
+                    f"Broadcast deauthentication on {ssid} failed: "
+                    f"aireplay-ng exited {result.returncode}"
+                    + (f": {result.stderr.strip()}" if result.stderr else "")
+                )
             return 0  # 0 means continuous until stopped
 
         except subprocess.TimeoutExpired:
@@ -477,6 +570,10 @@ class WiFiDeauthenticator:
         require_authorized(ssid=ssid, action="create_rogue_ap")
         if self.system != "linux":
             self.logger.error("Rogue AP creation is only supported on Linux")
+            return False
+
+        if not _valid_interface(interface):
+            self.logger.error(f"Invalid interface name: {interface!r}")
             return False
 
         self.logger.warning(f"Creating rogue AP: {ssid}")
@@ -557,6 +654,8 @@ class WiFiDeauthenticator:
                 (CR/LF injection) or the channel is not a valid integer.
         """
         interface = _require_single_line(interface, "interface")
+        if not _valid_interface(interface):
+            raise ValueError(f"invalid interface name: {interface!r}")
         ssid = _require_single_line(ssid, "ssid")
         try:
             channel = int(channel)
@@ -649,6 +748,13 @@ class NetworkInterruptor:
                 f"got {duration}"
             )
             return False
+        if not _valid_interface(interface):
+            # The interface sits in mdk3's positional interface slot;
+            # a value outside the interface-name shape (e.g. "-h")
+            # would be parsed as an mdk3 option. The channel got this
+            # validation in an earlier sweep; the interface did not.
+            self.logger.error(f"jam_channel: invalid interface name: {interface!r}")
+            return False
         self.logger.warning(f"Jamming channel {channel} for {duration} seconds")
         self.logger.warning(
             "This is a network disruption attack - use only for authorized testing"
@@ -688,6 +794,15 @@ class NetworkInterruptor:
                 return False
 
             time.sleep(duration)
+            if proc.poll() is not None:
+                # Started, then died mid-window (driver reset, interface
+                # dropped): reporting True would claim a full-duration
+                # jam that did not happen.
+                self.logger.error(
+                    f"mdk3 exited early (rc={proc.returncode}); "
+                    "jamming did not run for the full window"
+                )
+                return False
             return True
 
         except Exception as e:
@@ -730,6 +845,11 @@ class NetworkInterruptor:
             self.logger.error(
                 f"analyze_traffic_patterns: duration must be at least "
                 f"1 second, got {duration}"
+            )
+            return {}
+        if not _valid_interface(interface):
+            self.logger.error(
+                f"analyze_traffic_patterns: invalid interface name: {interface!r}"
             )
             return {}
 
