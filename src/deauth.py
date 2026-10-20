@@ -744,8 +744,7 @@ class NetworkInterruptor:
             # negative sleep afterwards raises only after mdk3 has
             # already been spawned. Refuse before spawning anything.
             self.logger.error(
-                f"jam_channel: duration must be at least 1 second, "
-                f"got {duration}"
+                f"jam_channel: duration must be at least 1 second, " f"got {duration}"
             )
             return False
         if not _valid_interface(interface):
