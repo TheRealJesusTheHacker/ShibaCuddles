@@ -84,8 +84,7 @@ def parse_port_spec(port_spec: str) -> List[int]:
     # cache) and escape straight through them.
     if not isinstance(port_spec, str):
         raise ValueError(
-            f"Port specification must be a string, "
-            f"got {type(port_spec).__name__}"
+            f"Port specification must be a string, " f"got {type(port_spec).__name__}"
         )
 
     # Memoized: PortScanner.scan() re-parses the spec for every host, and
