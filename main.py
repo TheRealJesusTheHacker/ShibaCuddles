@@ -166,9 +166,7 @@ def _is_private_target(network: str) -> bool:
         # Explicit CGNAT check: 100.64.0.0/10 (RFC 6598) is shared
         # carrier-grade NAT space that some ipaddress versions do not
         # report as private -- treat it as private here.
-        return net.is_private or net.overlaps(
-            ipaddress.ip_network("100.64.0.0/10")
-        )
+        return net.is_private or net.overlaps(ipaddress.ip_network("100.64.0.0/10"))
     except ValueError:
         return False
 
