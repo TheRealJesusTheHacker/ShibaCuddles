@@ -170,9 +170,7 @@ class ResultsHandler:
                         "name", _xml_safe(service_info.get("name", "Unknown"))
                     )
                     if service_info.get("version"):
-                        service_elem.set(
-                            "version", _xml_safe(service_info["version"])
-                        )
+                        service_elem.set("version", _xml_safe(service_info["version"]))
 
             if result_dict.get("scan_time"):
                 time_elem = ET.SubElement(host_elem, "ScanTime")
