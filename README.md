@@ -7,7 +7,7 @@
 
 > **Because every network needs a cuddly scanner.**
 
-**Status:** Released — current version 0.3.2, as stated in the `VERSION` file (see also [CHANGELOG.md](CHANGELOG.md)). Runs on Windows and Linux with Python 3.8+; the WiFi testing modules additionally require Linux and the aircrack-ng suite.
+**Status:** Released — current version 0.3.3, as stated in the `VERSION` file (see also [CHANGELOG.md](CHANGELOG.md)). Runs on Windows and Linux with Python 3.8+; the WiFi testing modules additionally require Linux and the aircrack-ng suite.
 
 ---
 
@@ -165,9 +165,10 @@ its target is allowlisted.
   a fresh DNS lookup, and IPv6 targets get `AF_INET6` sockets instead of
   silently reporting every port closed.
 - **Banner grabbing** helper for follow-up service identification.
-- **`UDPScanner`** (Python API) — parallel UDP probing: sends an empty
-  datagram and reports ports that answer. *Library-only; not wired into
-  the CLI/GUI scan pipeline.*
+- **`UDPScanner`** — parallel UDP probing: sends an empty
+  datagram and reports ports that answer. Wired into the scan pipeline
+  since 0.3.3: CLI `--udp`, the GUI "UDP scan" toggle, or
+  `NetworkScanner.enable_udp_scan` in the Python API.
 
 ### Service detection & OS fingerprinting (`src/service_detector.py`)
 
@@ -187,10 +188,13 @@ its target is allowlisted.
   Windows (128), Linux/Unix (64), Cisco/network gear (255), and legacy
   Windows (32), with a confidence score. Requires scapy and raw-socket
   privileges; degrades gracefully without them.
-- **`VulnerabilityScanner`** (Python API) — matches detected service
+- **`VulnerabilityScanner`** — matches detected service
   versions against a bundled table. **The bundled table is demo data
-  (four entries); it is not a vulnerability feed.** *Library-only; not
-  used by the CLI/GUI.*
+  (four entries); it is not a vulnerability feed.** Wired into the
+  scan pipeline since 0.3.3: CLI `--vuln-scan`, the GUI
+  "Vulnerability scan" toggle, or `NetworkScanner.enable_vuln_scan`
+  in the Python API (enabling it also runs service detection, which
+  the matching needs).
 
 ### GUI dashboard (`gui/`)
 
@@ -199,9 +203,11 @@ its target is allowlisted.
   (defaults to `1-1024`).
 - **Performance group** — thread count (default 10) and timeout spinners.
 - **Scan Options group** — checkboxes for ping sweep (on by default),
-  service detection, OS fingerprinting, and aggressive mode.
+  service detection, OS fingerprinting, aggressive mode, UDP scan, and
+  vulnerability scan.
 - **Three tabs** — *Results* (live table: IP Address, Status, Open Ports,
-  Services, OS — with pill-style alive/down indicators, alternating rows,
+  UDP Ports, Services, OS, Vulnerabilities — with pill-style alive/down
+  indicators, alternating rows,
   and batch insertion so large scans stay responsive), *Statistics* (cards:
   hosts scanned, hosts alive, open ports, avg ports/host), and *Activity
   Log* (color-coded, console-style).
@@ -248,11 +254,15 @@ are fully supported on Windows.
   deauth-flood mode; it requires a configured scope (indiscriminate
   action) and the jammer process is always terminated afterward —
   never orphaned.
-- **Traffic capture** — `analyze_traffic_patterns` captures with
-  `tcpdump` to a private temp pcap (never a fixed path, avoiding the
-  symlink-planting risk when running under sudo) and deletes it after.
-  **Packet-level analysis is not implemented yet** — it returns capture
-  metadata with empty protocol breakdowns. Treat it as a capture stub.
+- **Traffic capture & analysis** — `analyze_traffic_patterns` captures
+  with `tcpdump` to a private temp pcap (never a fixed path, avoiding
+  the symlink-planting risk when running under sudo), parses the
+  capture with scapy (`parse_pcap_file` in `src/deauth.py`), and
+  returns the real breakdown — total packets, per-protocol counts
+  (TCP/UDP/ICMP/ICMPv6/ARP/…), and top talker IPs — before deleting
+  the pcap. When scapy is not installed the result says so
+  (`parsing_available: False`, `total_packets: None`, with the
+  reason) instead of inventing numbers.
 - **Interface-argument validation** — every function that places an
   interface name in a tool's argv validates the shape first
   (`_valid_interface`: an alphanumeric first character, then
@@ -496,6 +506,8 @@ scanner = NetworkScanner(
 )
 scanner.enable_service_detection = True   # or --service-detection in the CLI
 scanner.enable_os_detection = True        # or --os-detection in the CLI
+scanner.enable_udp_scan = True            # or --udp in the CLI
+scanner.enable_vuln_scan = True           # or --vuln-scan in the CLI
 
 results = scanner.scan("22,80,443")       # port spec, same syntax as --ports
 for r in results:
@@ -566,8 +578,8 @@ cp authorized_targets.example.json authorized_targets.json
     statistics, progress callbacks, cooperative stop
   - `device.py` — `DeviceDiscovery` (ping sweep, hostname/MAC resolution),
     `ARPScanner` (scapy, optional), `Device` dataclass
-  - `port_scanner.py` — `PortScanner` (threaded TCP), `UDPScanner`
-    (library-only), banner grabbing
+  - `port_scanner.py` — `PortScanner` (threaded TCP), `UDPScanner`,
+    banner grabbing
   - `service_detector.py` — `ServiceDetector` (banner fingerprinting,
     version regexes, TTL OS detection), `VulnerabilityScanner`
     (**demo data only**)
@@ -621,16 +633,21 @@ third-party GitHub Actions are pinned to commit SHAs.
   `publish-pypi.yml` before tagging if a future release should NOT go
   to PyPI once publishing is live.
 
-## Roadmap (planned — not yet implemented)
+## Roadmap
 
-- `config.yaml` default-settings loader (a sample is documented nowhere
-  yet — the CLI is fully flag-driven today)
-- Packet-level parsing in `analyze_traffic_patterns` (currently a
-  capture stub returning empty breakdowns)
-- Wiring `UDPScanner` / `VulnerabilityScanner` into the CLI/GUI pipeline
-  (both exist as library classes today; `UDPScanner` has test coverage,
-  `VulnerabilityScanner` is an untested demo class)
-- Custom scan profiles and scheduled scans
+No open roadmap items. Packet-level parsing in
+`analyze_traffic_patterns` and wiring `UDPScanner` /
+`VulnerabilityScanner` into the CLI/GUI shipped in 0.3.3 (2026-10-21).
+
+Two former roadmap items were **retired on 2026-10-21**:
+
+- **`config.yaml` default-settings loader — dropped.** The CLI is
+  flag-driven and complete; a settings loader is speculative
+  convenience with no current need behind it.
+- **Custom scan profiles and scheduled scans — dropped.** Profiles
+  and scheduling are a separate scan-management product; if they are
+  ever wanted, they need a fresh greenlight rather than riding along
+  as a roadmap line.
 
 ## Security considerations
 

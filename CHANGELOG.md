@@ -7,6 +7,59 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.3] - 2026-10-21
+
+### Added (decision-execution wave, 2026-10-21)
+
+- Real packet-level parsing in `NetworkInterruptor.analyze_traffic_patterns`
+  (was a capture stub returning zeroed breakdowns): the capture is now
+  parsed with scapy via the new `parse_pcap_file` helper in
+  `src/deauth.py`, returning the actual total packet count,
+  per-protocol counts (TCP/UDP/ICMP/ICMPv6/ARP/Other IP/Non-IP), and
+  top talker IPs (combined, per-source, per-destination). When scapy
+  is not installed the result is honest about it —
+  `parsing_available: False`, `total_packets: None`, and a
+  `parsing_unavailable_reason` — instead of fabricated zeros.
+- `UDPScanner` and `VulnerabilityScanner` wired into the scan pipeline,
+  CLI, and GUI (both were library-only): `NetworkScanner` gains
+  `enable_udp_scan` / `enable_vuln_scan` flags and per-host
+  `udp_open_ports` / `vulnerabilities` on `ScanResult`; the CLI gains
+  `--udp` and `--vuln-scan`; the GUI gains "UDP scan" and
+  "Vulnerability scan" toggles, UDP Ports and Vulnerabilities results
+  columns, and matching statistics. Enabling the vulnerability scan
+  also runs service detection, which its matching needs. The bundled
+  vulnerability table remains **demo data (four sample entries)** —
+  it is not a feed, and findings are labeled as such everywhere they
+  are presented.
+- UDP ports and vulnerability findings are included in TXT and XML
+  exports (JSON already carried them via the result dataclass).
+- 12 new tests (`tests/test_decision_wave.py`): pcap ground-truth
+  breakdown (fixture with a known protocol/IP mix, verified end to
+  end through the capture path), the scapy-absent honest-unavailable
+  path, pipeline wiring, CLI flag parsing/delivery, and GUI toggles
+  exercised offscreen — suite now 167 tests.
+
+### Fixed (decision-execution wave, 2026-10-21)
+
+- The CLI banner's hardcoded version string said v0.3.2; it now
+  matches the release it ships in.
+
+### Removed (retired 2026-10-21)
+
+- README roadmap: the `config.yaml` default-settings loader line
+  (S-4) — **dropped**: the CLI is flag-driven and complete; a loader
+  is speculative convenience.
+- README roadmap: the custom scan profiles / scheduled scans line
+  (S-5) — **dropped**: profiles and scheduling are a separate
+  scan-management product; a fresh greenlight if ever wanted.
+- The `[Planned Releases]` section at the bottom of this file (S-6)
+  — **retired**: it read as a standing commitment, including an
+  unshipped web dashboard. Its shipped items (IPv6 support, the GUI,
+  rate limiting, performance metrics) are historical release notes
+  preserved in the version sections above; a web dashboard duplicates
+  the GUI that ships today, and an honest changelog carries no
+  unscheduled promises.
+
 ### Fixed (sweep #3 bug hunt, 2026-10-21)
 
 - CLI: an invalid `--ports` spec was only logged by the engine and the
@@ -227,6 +280,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Split `requirements.txt` (runtime) / `requirements-dev.txt` (test & tooling)
 
 ### Planned
+_(Historical note, added 2026-10-21: this list was written before
+0.2.0 shipped. IPv6 support, the GUI interface, performance metrics
+and statistics, and rate limiting all shipped in later releases and
+are recorded in those sections; custom scan profiles were retired
+on 2026-10-21 — see the 0.3.3 "Removed" notes. Nothing in this list
+is a current commitment.)_
 - IPv6 support
 - Custom scan profiles
 - GUI interface
@@ -255,21 +314,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
-## [Planned Releases]
+## [Planned Releases] — retired 2026-10-21
 
-### Version 0.3.0
-- **Target**: Q4 2026
-- IPv6 support
-- Vulnerability scanning
-- Web dashboard
-- Advanced filtering options
-
-### Version 1.0.0
-- **Target**: 2027
-- Stable API
-- Production-ready features
-- Comprehensive documentation
-- Native binaries for major platforms
+This section formerly listed a "Version 0.3.0" (IPv6 support,
+vulnerability scanning, web dashboard, advanced filtering) and a
+"Version 1.0.0" (stable API, production-ready features,
+comprehensive documentation, native binaries) as standing plans.
+It was **retired on 2026-10-21**: IPv6 support shipped (recorded in
+the release notes above), vulnerability scanning shipped in 0.3.3,
+a GUI ships today and a web dashboard would only duplicate it, and
+an honest changelog carries no unscheduled promises. The section no
+longer reads as a commitment; future releases will be recorded here
+when they ship, not promised in advance.
 
 ---
 
