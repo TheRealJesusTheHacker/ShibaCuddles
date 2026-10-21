@@ -697,6 +697,133 @@ def _require_single_line(value: str, name: str) -> str:
     return text
 
 
+def _classify_packet(packet, ip_cls, ipv6_cls, arp_cls) -> str:
+    """Bucket one packet into a single protocol name.
+
+    ARP first (it wraps no IP layer), then the IP protocol number
+    decides: ICMP / ICMPv6 / TCP / UDP get their own buckets and any
+    other IP protocol lands in "Other IP" rather than being silently
+    dropped from the breakdown. Packets with no IP/ARP layer at all
+    are "Non-IP".
+    """
+    if arp_cls is not None and arp_cls in packet:
+        return "ARP"
+    ip_layer = None
+    if ip_cls is not None and ip_cls in packet:
+        ip_layer = packet[ip_cls]
+    elif ipv6_cls is not None and ipv6_cls in packet:
+        ip_layer = packet[ipv6_cls]
+    if ip_layer is None:
+        return "Non-IP"
+    proto = getattr(ip_layer, "proto", None)
+    if proto is None:
+        proto = getattr(ip_layer, "nh", None)
+    return {1: "ICMP", 58: "ICMPv6", 6: "TCP", 17: "UDP"}.get(proto, "Other IP")
+
+
+def _packet_endpoints(packet, ip_cls, ipv6_cls, arp_cls):
+    """Return (source, destination) address strings for one packet.
+
+    IP/IPv6 use src/dst; ARP uses psrc/pdst (the protocol addresses,
+    not the MACs). Anything else has no IP-level endpoints: (None, None).
+    """
+    if ip_cls is not None and ip_cls in packet:
+        layer = packet[ip_cls]
+        return str(layer.src), str(layer.dst)
+    if ipv6_cls is not None and ipv6_cls in packet:
+        layer = packet[ipv6_cls]
+        return str(layer.src), str(layer.dst)
+    if arp_cls is not None and arp_cls in packet:
+        layer = packet[arp_cls]
+        return str(layer.psrc), str(layer.pdst)
+    return None, None
+
+
+def _top_talkers(counts: Dict, limit: int = 10) -> List[Dict]:
+    """Format an {address: count} dict as a ranked top-N list."""
+    ranked = sorted(counts.items(), key=lambda kv: (-kv[1], kv[0]))
+    return [{"ip": ip, "packets": n} for ip, n in ranked[:limit]]
+
+
+def parse_pcap_file(pcap_path: str, logger: logging.Logger = None) -> Dict:
+    """Parse a pcap capture file into a real protocol/IP breakdown.
+
+    Uses scapy when it is installed. When scapy is ABSENT this returns
+    ``parsing_available: False`` with the reason and ``total_packets``
+    set to None — it never fabricates a zeroed breakdown dressed up
+    as a real analysis (the old stub's failure mode).
+
+    Returns a dict with:
+      parsing_available (bool), total_packets (int, or None when
+      parsing is unavailable), protocols ({name: count}), top_ips /
+      top_sources / top_destinations ([{"ip": ..., "packets": ...}]),
+      src_ips / dst_ips ({address: count}), and — only when parsing is
+      unavailable — parsing_unavailable_reason (str).
+    """
+    log = logger or logging.getLogger(__name__)
+    unavailable = {
+        "parsing_available": False,
+        "total_packets": None,
+        "protocols": {},
+        "top_ips": [],
+        "top_sources": [],
+        "top_destinations": [],
+        "src_ips": {},
+        "dst_ips": {},
+    }
+    try:
+        from scapy.all import ARP, IP, IPv6, rdpcap
+    except ImportError as e:
+        unavailable["parsing_unavailable_reason"] = (
+            f"scapy is not installed ({e}); packet parsing is unavailable. "
+            "Install scapy (see requirements.txt) to enable traffic analysis."
+        )
+        log.warning(unavailable["parsing_unavailable_reason"])
+        return unavailable
+
+    try:
+        if os.path.getsize(pcap_path) == 0:
+            packets = []
+        else:
+            packets = rdpcap(pcap_path)
+    except Exception as e:
+        # scapy is present but the capture itself cannot be read
+        # (truncated/corrupt file): say so plainly instead of
+        # reporting an invented empty result.
+        unavailable["parsing_unavailable_reason"] = (
+            f"capture file could not be parsed: {e}"
+        )
+        log.error(unavailable["parsing_unavailable_reason"])
+        return unavailable
+
+    protocols: Dict[str, int] = {}
+    src_ips: Dict[str, int] = {}
+    dst_ips: Dict[str, int] = {}
+    for packet in packets:
+        name = _classify_packet(packet, IP, IPv6, ARP)
+        protocols[name] = protocols.get(name, 0) + 1
+        src, dst = _packet_endpoints(packet, IP, IPv6, ARP)
+        if src is not None:
+            src_ips[src] = src_ips.get(src, 0) + 1
+        if dst is not None:
+            dst_ips[dst] = dst_ips.get(dst, 0) + 1
+
+    combined: Dict[str, int] = dict(src_ips)
+    for ip, n in dst_ips.items():
+        combined[ip] = combined.get(ip, 0) + n
+
+    return {
+        "parsing_available": True,
+        "total_packets": len(packets),
+        "protocols": protocols,
+        "top_ips": _top_talkers(combined),
+        "top_sources": _top_talkers(src_ips),
+        "top_destinations": _top_talkers(dst_ips),
+        "src_ips": src_ips,
+        "dst_ips": dst_ips,
+    }
+
+
 class NetworkInterruptor:
     """
     Advanced network interruption and interference testing.
@@ -824,10 +951,13 @@ class NetworkInterruptor:
             duration: Capture duration in seconds
 
         Returns:
-            Dictionary with capture metadata. NOTE: packet-level analysis
-            is not implemented yet -- protocol breakdowns are empty and
-            total_packets is 0. The capture itself runs; only the parsing
-            is a stub.
+            Dictionary with capture metadata plus the real packet-level
+            breakdown produced by :func:`parse_pcap_file`: total packet
+            count, per-protocol counts, and top talker IPs. When scapy
+            is not installed, ``parsing_available`` is False,
+            ``total_packets`` is None, and
+            ``parsing_unavailable_reason`` explains why — no numbers
+            are fabricated for a capture that was never parsed.
         """
         # Coerce and floor the duration first (mirrors jam_channel):
         # it feeds the `timeout` wrapper below, where 0 would DISABLE
@@ -887,13 +1017,17 @@ class NetworkInterruptor:
                     "1000 packets arrived; using partial capture"
                 )
 
-            # Packet parsing not implemented yet (see docstring).
-            stats = {
-                "total_packets": 0,
-                "protocols": {},
-                "top_ips": [],
-                "duration": duration,
-            }
+            # Real packet-level parsing of the capture (see
+            # parse_pcap_file): protocol breakdown and top talkers
+            # come from the actual packets on disk. If scapy is
+            # absent the result says so instead of inventing numbers.
+            stats = parse_pcap_file(pcap_path, self.logger)
+            stats["duration"] = duration
+            if not stats["parsing_available"]:
+                self.logger.warning(
+                    "Traffic capture completed but packet parsing is "
+                    f"unavailable: {stats['parsing_unavailable_reason']}"
+                )
 
             return stats
 
