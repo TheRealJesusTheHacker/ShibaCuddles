@@ -227,13 +227,22 @@ def test_cli_flags_reach_scanner(monkeypatch):
 
 
 def test_gui_toggles_reach_engine(monkeypatch):
-    pytest.importorskip("PyQt6.QtWidgets")
+    # NOT importorskip: where PyQt6 is installed but its system
+    # libraries are not (e.g. no libEGL on a headless CI runner), the
+    # import raises ImportError for the missing library — pytest
+    # treats that as a failure, not a skip. Catch it explicitly and
+    # skip with the reason; where Qt can load, the test runs for real.
+    # gui.main_window calls sys.exit(1) when PyQt6 is missing, so
+    # SystemExit is a skip condition too.
+    try:
+        from PyQt6.QtWidgets import QApplication
+
+        import gui.main_window as gw
+    except (ImportError, SystemExit) as e:
+        pytest.skip(f"PyQt6 GUI stack unavailable in this environment: {e}")
     import os
 
     os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
-    from PyQt6.QtWidgets import QApplication
-
-    import gui.main_window as gw
 
     app = QApplication.instance() or QApplication([])
     window = gw.ShibaCuddlesGUI()
