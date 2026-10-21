@@ -199,6 +199,11 @@ class ShibaCuddlesGUI(QMainWindow):
 
         self.scanner_thread = None
         self.scan_results = []
+        # Set by stop_scan() before it waits for the thread: the thread
+        # still emits `finished` with the partial results afterwards, and
+        # on_scan_finished must not rebrand a user-stopped scan as a
+        # completed one (progress 100 + "Scan completed").
+        self._scan_stopped = False
         self.logger = logging.getLogger(__name__)
 
         self._init_ui()
@@ -727,6 +732,7 @@ class ShibaCuddlesGUI(QMainWindow):
                 self._log("Scan aborted: non-private target not confirmed", "warn")
                 return
 
+        self._scan_stopped = False
         self.scan_button.setEnabled(False)
         self.scan_button.setText("Scanning…")
         self.stop_button.setEnabled(True)
@@ -754,6 +760,7 @@ class ShibaCuddlesGUI(QMainWindow):
         if self.scanner_thread and self.scanner_thread.isRunning():
             # Cooperative stop: quit() alone is a no-op here because the
             # thread runs scan() directly without an event loop.
+            self._scan_stopped = True
             self.scanner_thread.request_stop()
             self.scanner_thread.wait()
             self._log("Scan stopped by user", "warn")
@@ -766,8 +773,18 @@ class ShibaCuddlesGUI(QMainWindow):
     def on_scan_finished(self, results: List):
         """Handle scan completion."""
         self.scan_results = results
-        self.progress_bar.setValue(100)
-        self._log(f"Scan completed — {len(results)} host(s) found", "ok")
+        stopped = self._scan_stopped
+        if stopped:
+            # The user stopped this scan: the results are partial. Keep
+            # them (they are real findings), but never dress a stopped
+            # scan up as a completed one — no 100% bar, no "completed".
+            self._log(
+                f"Scan stopped — partial results: {len(results)} host(s) found",
+                "warn",
+            )
+        else:
+            self.progress_bar.setValue(100)
+            self._log(f"Scan completed — {len(results)} host(s) found", "ok")
 
         # Populate results table in batches so large scans stay responsive
         # instead of freezing the UI building every row at once.
@@ -788,7 +805,8 @@ class ShibaCuddlesGUI(QMainWindow):
         self.scan_button.setText("Start Scan")
         self.stop_button.setEnabled(False)
         self.statusBar().showMessage(
-            f"Scan completed — {sum(1 for r in results if r.alive)} host(s) alive"
+            f"Scan {'stopped' if stopped else 'completed'} — "
+            f"{sum(1 for r in results if r.alive)} host(s) alive"
         )
 
     def _fill_result_row(self, row: int, result):

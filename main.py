@@ -15,7 +15,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent))
 
 from src.scanner import NetworkScanner
-from src.utils import print_banner, setup_logging, validate_network
+from src.utils import parse_port_spec, print_banner, setup_logging, validate_network
 
 
 def parse_arguments():
@@ -190,6 +190,16 @@ def main():
     # Validate network input
     if not validate_network(args.network):
         logger.error(f"Invalid network: {args.network}")
+        sys.exit(1)
+
+    # Validate the port spec here too: the engine only logs a bad spec
+    # and returns no results, so without this check a typo'd --ports
+    # looked exactly like a completed scan that found nothing (exit 0).
+    # The GUI validates the same way before starting a scan.
+    try:
+        parse_port_spec(args.ports)
+    except ValueError as e:
+        logger.error(f"Invalid port specification: {e}")
         sys.exit(1)
 
     # Scope guardrail: warn loudly when the target is not private address

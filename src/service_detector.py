@@ -314,6 +314,12 @@ class VulnerabilityScanner:
         },
     }
 
+    # _parse_banner names the SSH product after its pattern key ("SSH"),
+    # while the table below is keyed by the product name ("OpenSSH").
+    # Without this alias the pipeline's own OpenSSH banners never matched
+    # the table and its CVEs were silently never reported.
+    _NAME_ALIASES = {"SSH": "OpenSSH"}
+
     def __init__(self, logger: logging.Logger = None):
         """Initialize vulnerability scanner."""
         self.logger = logger or logging.getLogger(__name__)
@@ -335,10 +341,22 @@ class VulnerabilityScanner:
             version = service_info.get("version", "")
 
             known_versions = self.VULNERABILITIES.get(service_name, {})
+            if not known_versions:
+                alias = self._NAME_ALIASES.get(service_name)
+                if alias:
+                    known_versions = self.VULNERABILITIES.get(alias, {})
             for known_version, vuln in known_versions.items():
-                # Tolerant match: detected "7.0p1" matches known "7.0".
+                # Tolerant match with a digit boundary: detected "7.0p1"
+                # matches known "7.0" (a non-digit patch suffix), but
+                # "7.05" must NOT match "7.0" and "2.4.490" must NOT
+                # match "2.4.49" — a bare startswith attributed CVEs to
+                # versions that never had them.
                 if version and (
-                    version == known_version or version.startswith(known_version)
+                    version == known_version
+                    or (
+                        version.startswith(known_version)
+                        and not version[len(known_version)].isdigit()
+                    )
                 ):
                     vulnerabilities[f"{service_name}-{version}"] = vuln
                     break
