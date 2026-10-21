@@ -160,6 +160,13 @@ class ResultsHandler:
                 port_elem = ET.SubElement(open_ports_elem, "Port")
                 port_elem.text = _xml_safe(port)
 
+            udp_ports = result_dict.get("udp_open_ports") or []
+            if udp_ports:
+                udp_elem = ET.SubElement(host_elem, "UDPOpenPorts")
+                for port in udp_ports:
+                    port_elem = ET.SubElement(udp_elem, "Port")
+                    port_elem.text = _xml_safe(port)
+
             services = result_dict.get("services", {})
             if services:
                 services_elem = ET.SubElement(host_elem, "Services")
@@ -171,6 +178,14 @@ class ResultsHandler:
                     )
                     if service_info.get("version"):
                         service_elem.set("version", _xml_safe(service_info["version"]))
+
+            vulnerabilities = result_dict.get("vulnerabilities") or {}
+            if vulnerabilities:
+                vulns_elem = ET.SubElement(host_elem, "Vulnerabilities")
+                for key, vuln in vulnerabilities.items():
+                    vuln_elem = ET.SubElement(vulns_elem, "Vulnerability")
+                    vuln_elem.set("service", _xml_safe(key))
+                    vuln_elem.text = _xml_safe(vuln)
 
             if result_dict.get("scan_time"):
                 time_elem = ET.SubElement(host_elem, "ScanTime")
@@ -200,6 +215,10 @@ class ResultsHandler:
                 ports_str = ", ".join(map(str, open_ports)) if open_ports else "None"
                 f.write(f"Open Ports: {ports_str}\n")
 
+                udp_ports = result_dict.get("udp_open_ports") or []
+                if udp_ports:
+                    f.write(f"UDP Open Ports: {', '.join(map(str, udp_ports))}\n")
+
                 services = result_dict.get("services", {})
                 if services:
                     f.write("Services:\n")
@@ -207,6 +226,15 @@ class ResultsHandler:
                         service_name = service_info.get("name", "Unknown")
                         version = service_info.get("version", "")
                         f.write(f"  {port}: {service_name} {version}".strip() + "\n")
+
+                vulnerabilities = result_dict.get("vulnerabilities") or {}
+                if vulnerabilities:
+                    f.write(
+                        "Vulnerabilities (bundled demo table — sample "
+                        "data only, not a vulnerability feed):\n"
+                    )
+                    for key, vuln in vulnerabilities.items():
+                        f.write(f"  {key}: {vuln}\n")
 
                 os_info = result_dict.get("os_info", {})
                 if os_info:

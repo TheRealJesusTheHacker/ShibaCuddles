@@ -34,6 +34,9 @@ Examples:
   # Aggressive scan with service detection
   python main.py 192.168.1.0/24 --aggressive --service-detection
 
+  # UDP scan plus vulnerability matching on detected services
+  python main.py 192.168.1.0/24 --udp --vuln-scan
+
   # Save results to file
   python main.py 192.168.1.0/24 --output results.json --format json
 
@@ -102,6 +105,18 @@ Examples:
     )
     parser.add_argument(
         "--no-ping", action="store_true", help="Skip ping sweep, scan all hosts"
+    )
+    parser.add_argument(
+        "--udp",
+        action="store_true",
+        help="Also scan for open UDP ports (same port spec as the TCP scan)",
+    )
+    parser.add_argument(
+        "--vuln-scan",
+        action="store_true",
+        help="Match detected services against the bundled vulnerability "
+        "table (demo data: four sample entries, not a vulnerability "
+        "feed — a clean result does not mean a host is safe)",
     )
 
     # Output options
@@ -239,6 +254,8 @@ def main():
     else:
         scanner.enable_service_detection = args.service_detection
         scanner.enable_os_detection = args.os_detection
+    scanner.enable_udp_scan = args.udp
+    scanner.enable_vuln_scan = args.vuln_scan
 
     # Ping sweep is ON by default; --no-ping disables it.
     # (--ping-sweep is accepted for explicitness but is a no-op.)

@@ -12,9 +12,9 @@ from dataclasses import dataclass
 from typing import Callable, Dict, List, Optional
 
 from .device import DeviceDiscovery
-from .port_scanner import PortScanner
+from .port_scanner import PortScanner, UDPScanner
 from .results_handler import ResultsHandler
-from .service_detector import ServiceDetector
+from .service_detector import ServiceDetector, VulnerabilityScanner
 from .utils import clamp_threads, format_elapsed_time, parse_port_spec
 
 
@@ -42,6 +42,8 @@ class ScanResult:
     services: Dict[int, Dict] = None
     os_info: Dict = None
     scan_time: float = 0.0
+    udp_open_ports: List[int] = None
+    vulnerabilities: Dict = None
 
     def __post_init__(self):
         if self.open_ports is None:
@@ -54,6 +56,10 @@ class ScanResult:
             self.services = {}
         if self.os_info is None:
             self.os_info = {}
+        if self.udp_open_ports is None:
+            self.udp_open_ports = []
+        if self.vulnerabilities is None:
+            self.vulnerabilities = {}
 
 
 class NetworkScanner:
@@ -115,6 +121,8 @@ class NetworkScanner:
         self.ping_sweep = True
         self.enable_service_detection = False
         self.enable_os_detection = False
+        self.enable_udp_scan = False
+        self.enable_vuln_scan = False
 
         # Initialize components with the CLAMPED values, so the minimums
         # enforced above actually apply to the components doing the work.
@@ -131,6 +139,13 @@ class NetworkScanner:
         self.service_detector = ServiceDetector(
             timeout=self.timeout, logger=self.logger
         )
+        self.udp_scanner = UDPScanner(
+            timeout=self.timeout,
+            threads=self.threads,
+            logger=self.logger,
+            stop_event=self.stop_event,
+        )
+        self.vulnerability_scanner = VulnerabilityScanner(logger=self.logger)
         self.results_handler = ResultsHandler(logger=self.logger)
 
         # Statistics
@@ -139,6 +154,8 @@ class NetworkScanner:
             "alive_hosts": 0,
             "dead_hosts": 0,
             "open_ports_found": 0,
+            "udp_open_ports_found": 0,
+            "vulnerabilities_found": 0,
             "scan_duration": 0.0,
             "hosts_per_second": 0.0,
         }
@@ -177,6 +194,8 @@ class NetworkScanner:
             "alive_hosts": 0,
             "dead_hosts": 0,
             "open_ports_found": 0,
+            "udp_open_ports_found": 0,
+            "vulnerabilities_found": 0,
             "scan_duration": 0.0,
             "hosts_per_second": 0.0,
         }
@@ -213,8 +232,26 @@ class NetworkScanner:
                     f"Found {self.stats['open_ports_found']} open ports"
                 )
 
-            # Step 4: Service detection (optional)
-            if self.enable_service_detection and results and not self._should_stop():
+            # Step 3b: UDP port scanning (optional, --udp)
+            if self.enable_udp_scan and results and not self._should_stop():
+                self.logger.info("Starting UDP port scanning phase...")
+                results = self._scan_udp_ports(results, port_range)
+                for result in results:
+                    self.stats["udp_open_ports_found"] += len(result.udp_open_ports)
+                self.logger.info(
+                    f"UDP scan complete. "
+                    f"Found {self.stats['udp_open_ports_found']} open UDP ports"
+                )
+
+            # Step 4: Service detection (optional). Vulnerability
+            # scanning matches against detected services, so enabling
+            # it implies this phase runs even when service detection
+            # itself was not requested.
+            if (
+                (self.enable_service_detection or self.enable_vuln_scan)
+                and results
+                and not self._should_stop()
+            ):
                 self.logger.info("Starting service detection phase...")
                 results = self._detect_services(results)
 
@@ -222,6 +259,16 @@ class NetworkScanner:
             if self.enable_os_detection and results and not self._should_stop():
                 self.logger.info("Starting OS fingerprinting phase...")
                 results = self._detect_os(results)
+
+            # Step 6: Vulnerability scan (optional, --vuln-scan). Matches
+            # the services detected above against VulnerabilityScanner's
+            # bundled table — DEMO DATA (four sample entries, not a
+            # vulnerability feed); see that class's docstring.
+            if self.enable_vuln_scan and results and not self._should_stop():
+                self.logger.info("Starting vulnerability scan phase...")
+                results = self._detect_vulnerabilities(results)
+                for result in results:
+                    self.stats["vulnerabilities_found"] += len(result.vulnerabilities)
 
         finally:
             # Calculate statistics
@@ -350,6 +397,56 @@ class NetworkScanner:
             self._report_progress(idx, total)
         return results
 
+    def _scan_udp_ports(
+        self, results: List[ScanResult], port_range: str
+    ) -> List[ScanResult]:
+        """Probe UDP ports on each scanned host (serial across hosts).
+
+        UDPScanner parallelizes the ports within a host, mirroring how
+        _scan_ports uses PortScanner; nesting a host pool around it
+        would multiply thread counts the same way.
+        """
+        try:
+            ports = parse_port_spec(port_range)
+        except ValueError as e:
+            self.logger.error(f"Invalid port specification: {e}")
+            return results
+        if not ports:
+            return results
+
+        for result in results:
+            if self._should_stop():
+                self.logger.info("UDP scan aborted by stop request")
+                break
+            try:
+                result.udp_open_ports = self.udp_scanner.scan(result.ip, ports)
+            except Exception as e:
+                self.logger.debug(f"UDP scan failed for {result.ip}: {e}")
+                result.udp_open_ports = []
+        return results
+
+    def _detect_vulnerabilities(self, results: List[ScanResult]) -> List[ScanResult]:
+        """Match each host's detected services against the vuln table.
+
+        Hosts are handled serially: VulnerabilityScanner.scan is a
+        pure table lookup (no I/O), so a thread pool would add
+        overhead without shortening anything.
+        """
+        for result in results:
+            if self._should_stop():
+                break
+            if result.services:
+                try:
+                    result.vulnerabilities = self.vulnerability_scanner.scan(
+                        result.services
+                    )
+                except Exception as e:
+                    self.logger.debug(f"Vulnerability scan failed on {result.ip}: {e}")
+                    result.vulnerabilities = {}
+            else:
+                result.vulnerabilities = {}
+        return results
+
     def _map_parallel(self, func, results: List[ScanResult]) -> List[ScanResult]:
         """Apply func to each result in a thread pool, preserving order."""
         ordered: List[Optional[ScanResult]] = [None] * len(results)
@@ -437,6 +534,19 @@ class NetworkScanner:
                         print(f"    {port}: {service_name} {version}".strip())
             else:
                 print("  Open Ports: None found")
+
+            if result.udp_open_ports:
+                print(
+                    "  UDP Open Ports: " f"{', '.join(map(str, result.udp_open_ports))}"
+                )
+
+            if result.vulnerabilities:
+                print(
+                    "  Vulnerabilities (bundled demo table — sample data "
+                    "only, not a vulnerability feed):"
+                )
+                for key, vuln in result.vulnerabilities.items():
+                    print(f"    {key}: {vuln}")
 
             if result.os_info:
                 os_name = result.os_info.get("name", "Unknown")

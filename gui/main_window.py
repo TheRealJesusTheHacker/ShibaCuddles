@@ -99,6 +99,8 @@ class ScannerThread(QThread):
         service_detection: bool = False,
         os_detection: bool = False,
         aggressive: bool = False,
+        udp_scan: bool = False,
+        vuln_scan: bool = False,
     ):
         super().__init__()
         self.network = network
@@ -109,6 +111,8 @@ class ScannerThread(QThread):
         self.service_detection = service_detection
         self.os_detection = os_detection
         self.aggressive = aggressive
+        self.udp_scan = udp_scan
+        self.vuln_scan = vuln_scan
         self.logger = logging.getLogger(__name__)
         self._stop_event = threading.Event()
 
@@ -147,6 +151,8 @@ class ScannerThread(QThread):
             else:
                 scanner.enable_service_detection = self.service_detection
                 scanner.enable_os_detection = self.os_detection
+            scanner.enable_udp_scan = self.udp_scan
+            scanner.enable_vuln_scan = self.vuln_scan
 
             results = scanner.scan(self.ports)
             self.finished.emit(results)
@@ -336,6 +342,21 @@ class ShibaCuddlesGUI(QMainWindow):
             "Enables service detection and OS fingerprinting together."
         )
         o_layout.addWidget(self.aggressive_check)
+
+        self.udp_scan_check = QCheckBox("UDP scan")
+        self.udp_scan_check.setToolTip(
+            "Also probe for open UDP ports, using the same port spec "
+            "as the TCP scan."
+        )
+        o_layout.addWidget(self.udp_scan_check)
+
+        self.vuln_scan_check = QCheckBox("Vulnerability scan")
+        self.vuln_scan_check.setToolTip(
+            "Match detected services against the bundled vulnerability "
+            "table. That table is demo data (four sample entries), not "
+            "a vulnerability feed — no match does not mean a host is safe."
+        )
+        o_layout.addWidget(self.vuln_scan_check)
         layout.addWidget(opts)
 
         # --- Actions ---
@@ -379,16 +400,26 @@ class ShibaCuddlesGUI(QMainWindow):
 
         # Results table tab
         self.results_table = QTableWidget()
-        self.results_table.setColumnCount(5)
+        self.results_table.setColumnCount(7)
         self.results_table.setHorizontalHeaderLabels(
-            ["IP Address", "Status", "Open Ports", "Services", "OS"]
+            [
+                "IP Address",
+                "Status",
+                "Open Ports",
+                "UDP Ports",
+                "Services",
+                "OS",
+                "Vulnerabilities",
+            ]
         )
         header = self.results_table.horizontalHeader()
         header.setSectionResizeMode(0, header.ResizeMode.Stretch)
         header.setSectionResizeMode(1, header.ResizeMode.ResizeToContents)
         header.setSectionResizeMode(2, header.ResizeMode.Stretch)
-        header.setSectionResizeMode(3, header.ResizeMode.ResizeToContents)
-        header.setSectionResizeMode(4, header.ResizeMode.Stretch)
+        header.setSectionResizeMode(3, header.ResizeMode.Stretch)
+        header.setSectionResizeMode(4, header.ResizeMode.ResizeToContents)
+        header.setSectionResizeMode(5, header.ResizeMode.Stretch)
+        header.setSectionResizeMode(6, header.ResizeMode.Stretch)
         self.results_table.verticalHeader().setVisible(False)
         self.results_table.setAlternatingRowColors(True)
         self.results_table.setSelectionBehavior(
@@ -410,7 +441,7 @@ class ShibaCuddlesGUI(QMainWindow):
         self.card_hosts = StatCard("Hosts scanned")
         self.card_alive = StatCard("Hosts alive", accent=_ACCENT)
         self.card_ports = StatCard("Open ports", accent="#6cb8ff")
-        self.card_avg = StatCard("Avg ports / host", accent="#c9a6ff")
+        self.card_avg = StatCard("Avg ports / host", accent="#f0b429")
         for card in (self.card_hosts, self.card_alive, self.card_ports, self.card_avg):
             cards_row.addWidget(card)
         stats_layout.addLayout(cards_row)
@@ -749,6 +780,8 @@ class ShibaCuddlesGUI(QMainWindow):
             service_detection=self.service_detection_check.isChecked(),
             os_detection=self.os_detection_check.isChecked(),
             aggressive=self.aggressive_check.isChecked(),
+            udp_scan=self.udp_scan_check.isChecked(),
+            vuln_scan=self.vuln_scan_check.isChecked(),
         )
         self.scanner_thread.finished.connect(self.on_scan_finished)
         self.scanner_thread.error.connect(self.on_scan_error)
@@ -816,8 +849,14 @@ class ShibaCuddlesGUI(QMainWindow):
         ports = ", ".join(map(str, result.open_ports[:8]))
         if len(result.open_ports) > 8:
             ports += f" (+{len(result.open_ports) - 8} more)"
+        udp_ports_list = getattr(result, "udp_open_ports", None) or []
+        udp_ports = ", ".join(map(str, udp_ports_list[:8]))
+        if len(udp_ports_list) > 8:
+            udp_ports += f" (+{len(udp_ports_list) - 8} more)"
         services = str(len(result.services)) if result.services else "0"
         os_name = result.os_info.get("name", "Unknown") if result.os_info else "Unknown"
+        vulns = getattr(result, "vulnerabilities", None) or {}
+        vuln_text = "; ".join(f"{k}: {v}" for k, v in vulns.items())
 
         ip_item = QTableWidgetItem(ip)
         mono = QFont("Consolas", 10)
@@ -830,11 +869,17 @@ class ShibaCuddlesGUI(QMainWindow):
         font.setBold(True)
         status_item.setFont(font)
 
+        vuln_item = QTableWidgetItem(vuln_text)
+        if vulns:
+            vuln_item.setForeground(QColor(_DANGER))
+
         self.results_table.setItem(row, 0, ip_item)
         self.results_table.setItem(row, 1, status_item)
         self.results_table.setItem(row, 2, QTableWidgetItem(ports))
-        self.results_table.setItem(row, 3, QTableWidgetItem(services))
-        self.results_table.setItem(row, 4, QTableWidgetItem(os_name))
+        self.results_table.setItem(row, 3, QTableWidgetItem(udp_ports))
+        self.results_table.setItem(row, 4, QTableWidgetItem(services))
+        self.results_table.setItem(row, 5, QTableWidgetItem(os_name))
+        self.results_table.setItem(row, 6, vuln_item)
 
     def on_scan_error(self, error: str):
         """Handle scan errors."""
@@ -858,12 +903,20 @@ class ShibaCuddlesGUI(QMainWindow):
         self.card_ports.set_value(str(total_ports))
         self.card_avg.set_value(f"{avg:.1f}")
 
+        total_udp = sum(len(getattr(r, "udp_open_ports", None) or []) for r in results)
+        total_vulns = sum(
+            len(getattr(r, "vulnerabilities", None) or {}) for r in results
+        )
+
         lines = [
             f"Hosts scanned:      {total_hosts}",
             f"Hosts alive:        {alive_hosts}",
             f"Hosts down:         {total_hosts - alive_hosts}",
             f"Total open ports:   {total_ports}",
             f"Avg ports / host:   {avg:.2f}",
+            f"Open UDP ports:     {total_udp}",
+            f"Vulnerabilities:    {total_vulns} "
+            "(bundled demo table — sample data only)",
         ]
         if alive_hosts:
             top = sorted(results, key=lambda r: len(r.open_ports), reverse=True)[:5]
