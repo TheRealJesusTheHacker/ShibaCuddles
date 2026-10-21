@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed (sweep #3 bug hunt, 2026-10-21)
+
+- CLI: an invalid `--ports` spec was only logged by the engine and the
+  run exited 0 looking like a completed empty scan; `main()` now
+  validates the spec up front (as the GUI already did) and exits 1
+- `VulnerabilityScanner` never matched OpenSSH through the real
+  pipeline — `_parse_banner` names the product "SSH" while the table
+  is keyed "OpenSSH"; the scanner now resolves that alias
+- Vulnerability version matching was a bare prefix test, so "7.05"
+  matched known-vulnerable "7.0" and "2.4.490" matched "2.4.49";
+  matching now requires a non-digit boundary after the known version
+  ("7.0p1" still matches "7.0")
+- GUI: a user-stopped scan still emitted `finished`, and the handler
+  rebranded the partial results as "Scan completed" at 100%; a
+  stopped scan is now reported as stopped with partial results
+- Regression tests: `tests/test_bughunt3_sweep3.py` (GUI stop behavior
+  verified offscreen, not covered by the headless suite)
+
 ### Fixed (round-2 bug hunt, 2026-10-13)
 - Service detection misidentified Apache and Nginx: the generic HTTP
   `Server:` pattern ran before the product patterns and captured the
