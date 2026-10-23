@@ -772,7 +772,7 @@ def parse_pcap_file(pcap_path: str, logger: logging.Logger = None) -> Dict:
         "dst_ips": {},
     }
     try:
-        from scapy.all import ARP, IP, IPv6, rdpcap
+        from scapy.all import ARP, IP, IPv6, PcapReader
     except ImportError as e:
         unavailable["parsing_unavailable_reason"] = (
             f"scapy is not installed ({e}); packet parsing is unavailable. "
@@ -781,32 +781,39 @@ def parse_pcap_file(pcap_path: str, logger: logging.Logger = None) -> Dict:
         log.warning(unavailable["parsing_unavailable_reason"])
         return unavailable
 
+    protocols: Dict[str, int] = {}
+    src_ips: Dict[str, int] = {}
+    dst_ips: Dict[str, int] = {}
+    total_packets = 0
     try:
-        if os.path.getsize(pcap_path) == 0:
-            packets = []
-        else:
-            packets = rdpcap(pcap_path)
+        # Stream the capture packet by packet (PcapReader) instead of
+        # rdpcap()'s load-everything-into-a-list: a large capture handed
+        # to this public API used to be held in memory whole (packets
+        # plus their decoded layers) before any counting happened, so a
+        # big or crafted file could exhaust RAM before the breakdown
+        # even started. Counting is incremental now; memory stays flat
+        # regardless of capture size.
+        if os.path.getsize(pcap_path) != 0:
+            with PcapReader(pcap_path) as reader:
+                for packet in reader:
+                    total_packets += 1
+                    name = _classify_packet(packet, IP, IPv6, ARP)
+                    protocols[name] = protocols.get(name, 0) + 1
+                    src, dst = _packet_endpoints(packet, IP, IPv6, ARP)
+                    if src is not None:
+                        src_ips[src] = src_ips.get(src, 0) + 1
+                    if dst is not None:
+                        dst_ips[dst] = dst_ips.get(dst, 0) + 1
     except Exception as e:
         # scapy is present but the capture itself cannot be read
         # (truncated/corrupt file): say so plainly instead of
-        # reporting an invented empty result.
+        # reporting an invented empty result — or, mid-stream, a
+        # partial breakdown dressed up as a complete one.
         unavailable["parsing_unavailable_reason"] = (
             f"capture file could not be parsed: {e}"
         )
         log.error(unavailable["parsing_unavailable_reason"])
         return unavailable
-
-    protocols: Dict[str, int] = {}
-    src_ips: Dict[str, int] = {}
-    dst_ips: Dict[str, int] = {}
-    for packet in packets:
-        name = _classify_packet(packet, IP, IPv6, ARP)
-        protocols[name] = protocols.get(name, 0) + 1
-        src, dst = _packet_endpoints(packet, IP, IPv6, ARP)
-        if src is not None:
-            src_ips[src] = src_ips.get(src, 0) + 1
-        if dst is not None:
-            dst_ips[dst] = dst_ips.get(dst, 0) + 1
 
     combined: Dict[str, int] = dict(src_ips)
     for ip, n in dst_ips.items():
@@ -814,7 +821,7 @@ def parse_pcap_file(pcap_path: str, logger: logging.Logger = None) -> Dict:
 
     return {
         "parsing_available": True,
-        "total_packets": len(packets),
+        "total_packets": total_packets,
         "protocols": protocols,
         "top_ips": _top_talkers(combined),
         "top_sources": _top_talkers(src_ips),

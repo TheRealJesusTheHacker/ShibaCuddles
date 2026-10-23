@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.4] - 2026-10-23
+
+### Fixed (fleet sweep #4, 2026-10-23)
+
+- `parse_pcap_file` now streams the capture with scapy's `PcapReader`
+  instead of `rdpcap()`'s load-everything-into-memory read: a large or
+  crafted capture handed to this API could previously exhaust RAM
+  before any counting happened. Counting is incremental (flat memory),
+  the result shape is unchanged, and a capture that fails mid-stream is
+  still reported as parsing-unavailable rather than as a partial
+  breakdown. Three regression tests (`tests/test_sweep4.py`) — suite
+  now 170 tests.
+
 ## [0.3.3] - 2026-10-21
 
 ### Added (decision-execution wave, 2026-10-21)

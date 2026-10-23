@@ -7,7 +7,7 @@
 
 > **Because every network needs a cuddly scanner.**
 
-**Status:** Released — current version 0.3.3, as stated in the `VERSION` file (see also [CHANGELOG.md](CHANGELOG.md)). Runs on Windows and Linux with Python 3.8+; the WiFi testing modules additionally require Linux and the aircrack-ng suite.
+**Status:** Released — current version 0.3.4, as stated in the `VERSION` file (see also [CHANGELOG.md](CHANGELOG.md)). Runs on Windows and Linux with Python 3.8+; the WiFi testing modules additionally require Linux and the aircrack-ng suite.
 
 ---
 
@@ -592,7 +592,7 @@ cp authorized_targets.example.json authorized_targets.json
     address-family resolution, helpers
 - `gui/` — PyQt6 dashboard (`main_window.py`: header, config panel,
   results/statistics/log tabs, export, stop)
-- `tests/` — unit test suite (167 tests)
+- `tests/` — unit test suite (170 tests)
 - `authorized_targets.example.json` — scope-file template (copy to
   `authorized_targets.json`; gitignored)
 
@@ -601,7 +601,7 @@ cp authorized_targets.example.json authorized_targets.json
 ```bash
 pip install -r requirements-dev.txt
 
-# Run the test suite (167 tests)
+# Run the test suite (170 tests)
 python -m pytest tests/ -v
 
 # Format & lint (enforced in CI)
