@@ -592,7 +592,7 @@ cp authorized_targets.example.json authorized_targets.json
     address-family resolution, helpers
 - `gui/` — PyQt6 dashboard (`main_window.py`: header, config panel,
   results/statistics/log tabs, export, stop)
-- `tests/` — unit test suite (151 tests)
+- `tests/` — unit test suite (167 tests)
 - `authorized_targets.example.json` — scope-file template (copy to
   `authorized_targets.json`; gitignored)
 
@@ -601,7 +601,7 @@ cp authorized_targets.example.json authorized_targets.json
 ```bash
 pip install -r requirements-dev.txt
 
-# Run the test suite (151 tests)
+# Run the test suite (167 tests)
 python -m pytest tests/ -v
 
 # Format & lint (enforced in CI)
