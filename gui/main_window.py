@@ -59,8 +59,16 @@ def _is_private_target(network: str) -> bool:
         net = ipaddress.ip_network(network.strip(), strict=False)
         # Explicit CGNAT check: 100.64.0.0/10 (RFC 6598) is shared
         # carrier-grade NAT space that some ipaddress versions do not
-        # report as private -- treat it as private here.
-        return net.is_private or net.overlaps(ipaddress.ip_network("100.64.0.0/10"))
+        # report as private -- treat it as private here. The target
+        # must lie WHOLLY inside the CGNAT range (subnet_of), not
+        # merely overlap it: the old overlaps() check classified
+        # e.g. 100.0.0.0/8 -- mostly public space that happens to
+        # contain the /10 -- as private, skipping the authorization
+        # warning for a largely public target. (Mirror of main.py.)
+        if net.is_private:
+            return True
+        cgnat = ipaddress.ip_network("100.64.0.0/10")
+        return net.version == 4 and net.subnet_of(cgnat)
     except ValueError:
         return False
 

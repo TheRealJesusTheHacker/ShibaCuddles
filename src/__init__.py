@@ -16,7 +16,7 @@ from .utils import (
     validate_network,
 )
 
-__version__ = "0.3.4"
+__version__ = "0.3.5"
 __author__ = "thedarkonejesus"
 __description__ = "ShibaCuddles - Advanced Network Scanner"
 

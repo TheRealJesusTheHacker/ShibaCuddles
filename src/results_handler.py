@@ -269,8 +269,32 @@ class ResultsHandler:
         report.append("")
 
         total_hosts = len(results)
-        alive_hosts = sum(1 for r in results if getattr(r, "alive", False))
-        total_open_ports = sum(len(getattr(r, "open_ports", [])) for r in results)
+        # Summary counts must normalize dict results the same way the
+        # exporters and the HOST DETAILS loop below do: getattr() on a
+        # plain dict always falls back to the default, so dict inputs
+        # (accepted everywhere else in this class) reported 0 alive
+        # hosts and 0 open ports here even when the details section
+        # listed the ports.
+        normalized = [
+            asdict(r) if hasattr(r, "__dataclass_fields__") else r for r in results
+        ]
+        alive_hosts = sum(
+            1
+            for r in normalized
+            if (
+                r.get("alive", False)
+                if isinstance(r, dict)
+                else getattr(r, "alive", False)
+            )
+        )
+        total_open_ports = sum(
+            (
+                len(r.get("open_ports") or [])
+                if isinstance(r, dict)
+                else len(getattr(r, "open_ports", []) or [])
+            )
+            for r in normalized
+        )
 
         report.append("SUMMARY")
         report.append("-" * 40)

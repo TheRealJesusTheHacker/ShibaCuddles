@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.5] - 2026-10-24
+
+### Fixed (fleet sweep #5, 2026-10-24)
+
+- Authorization-warning guardrail: `_is_private_target` (CLI in
+  `main.py`, mirrored in the GUI) treated any target that merely
+  OVERLAPPED the CGNAT range 100.64.0.0/10 as private, so a mostly
+  public target such as 100.0.0.0/8 skipped the "not private address
+  space" confirmation entirely. A target now counts as private via
+  the CGNAT check only when it lies wholly inside the range
+  (`subnet_of`, with an address-family guard so IPv6 targets cannot
+  raise). RFC1918 and true CGNAT targets are unchanged.
+- `ResultsHandler.generate_report` summary counts for dict results:
+  the exporters and the report's own HOST DETAILS section accept
+  plain dicts, but the SUMMARY used `getattr()` on them and always
+  reported 0 alive hosts and 0 open ports. Dict and dataclass
+  results now produce identical summaries.
+- Regression tests: `tests/test_sweep5.py` (9 tests). Suite: 166
+  collected — 164 passed, 2 skipped (Qt-dependent GUI tests skip
+  where Qt system libraries are absent).
+
 ## [0.3.4] - 2026-10-23
 
 ### Fixed (fleet sweep #4, 2026-10-23)

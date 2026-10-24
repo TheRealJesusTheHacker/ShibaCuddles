@@ -7,7 +7,7 @@
 
 > **Because every network needs a cuddly scanner.**
 
-**Status:** Released — current version 0.3.4, as stated in the `VERSION` file (see also [CHANGELOG.md](CHANGELOG.md)). Runs on Windows and Linux with Python 3.8+; the WiFi testing modules additionally require Linux and the aircrack-ng suite.
+**Status:** Released — current version 0.3.5, as stated in the `VERSION` file (see also [CHANGELOG.md](CHANGELOG.md)). Runs on Windows and Linux with Python 3.8+; the WiFi testing modules additionally require Linux and the aircrack-ng suite.
 
 ---
 
