@@ -369,14 +369,24 @@ Requires **Python 3.8+**.
 ```bash
 git clone https://github.com/TheRealJesusTheHacker/ShibaCuddles.git
 cd ShibaCuddles
-pip install -r requirements.txt
+pip install --require-hashes -r requirements.lock.txt
 ```
 
+Installs are hash-verified (fleet `--require-hashes` policy):
+`requirements.txt` keeps the human-edited pins (including the
+`PyQt6-Charts>=6.0.0,<7.0.0` range), and `requirements.lock.txt` is the
+committed lock of the full resolved closure with sha256 hashes — a
+mismatch fails the install loudly. Never install from
+`requirements.txt` directly. A version bump is not landed until the
+lock is regenerated (command in the lock's header) in the same
+change-set.
+
 Or install the package itself (provides `shiba-cuddles` and
-`shiba-cuddles-gui` console commands):
+`shiba-cuddles-gui` console commands) — after the lock install above,
+so its dependencies are already present at the locked versions:
 
 ```bash
-pip install .
+pip install --no-deps .
 ```
 
 For WiFi features, install the aircrack-ng suite separately:
@@ -489,7 +499,7 @@ If PyQt6 isn't installed you'll get a friendly pointer instead of a
 traceback:
 
 ```bash
-pip install PyQt6 PyQt6-Charts
+pip install --require-hashes -r requirements.lock.txt
 ```
 
 ## Python API
@@ -599,7 +609,7 @@ cp authorized_targets.example.json authorized_targets.json
 ## Development
 
 ```bash
-pip install -r requirements-dev.txt
+pip install --require-hashes -r requirements-dev.lock.txt
 
 # Run the test suite (170 tests)
 python -m pytest tests/ -v
@@ -665,7 +675,7 @@ Two former roadmap items were **retired on 2026-10-21**:
 | Issue | Fix |
 |---|---|
 | Permission denied (WiFi features) | `sudo chmod +u+s /usr/bin/airmon-ng /usr/bin/aireplay-ng` |
-| PyQt6 not found | `pip install PyQt6 PyQt6-Charts` |
+| PyQt6 not found | `pip install --require-hashes -r requirements.lock.txt` |
 | `airodump-ng` not found | Install the aircrack-ng suite (see Installation) |
 | OS detection returns Unknown | Needs scapy + raw-socket privileges (run with sudo); without them it degrades gracefully |
 | Scan timeouts | Raise `--timeout`, e.g. `--timeout 15` |

@@ -20,8 +20,7 @@ jobs:
           python-version: "3.11"
       - name: Install dependencies
         run: |
-          pip install -r requirements.txt
-          pip install pyinstaller
+          pip install --require-hashes -r requirements-dev.lock.txt
       - name: Build with PyInstaller
         run: pyinstaller --noconfirm shibacuddles.spec
       - name: Generate SHA256 hashes
@@ -58,8 +57,7 @@ jobs:
           python-version: "3.11"
       - name: Install dependencies
         run: |
-          pip install -r requirements.txt
-          pip install pyinstaller
+          pip install --require-hashes -r requirements-dev.lock.txt
       - name: Build with PyInstaller
         run: pyinstaller --noconfirm shibacuddles.spec
       - name: Generate SHA256 hashes

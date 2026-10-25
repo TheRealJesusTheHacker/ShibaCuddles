@@ -23,9 +23,12 @@ jobs:
         uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v5
         with:
           python-version: "3.11"
-      - name: Install build backend
-        run: python -m pip install --upgrade pip build
+      - name: Install build backend (hash-verified lock)
+        run: python -m pip install --require-hashes -r requirements-dev.lock.txt
       - name: Build sdist and wheel
-        run: python -m build
+        # --no-isolation: the build backend (setuptools/wheel/build) is the
+        # hash-verified set installed above; build isolation would fetch
+        # unhashed build-system requires from the index instead.
+        run: python -m build --no-isolation
       - name: Publish to PyPI
         uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33  # v1.14.2

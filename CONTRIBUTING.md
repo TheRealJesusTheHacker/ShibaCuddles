@@ -31,9 +31,9 @@ python -m venv venv
 # Activate it
 source venv/bin/activate  # On Windows: venv\Scripts\activate
 
-# Install dependencies with dev tools
-pip install -r requirements.txt
-pip install pytest pytest-cov pylint black
+# Install dependencies with dev tools (hash-verified lock:
+# runtime + test/lint/packaging tooling, one install)
+pip install --require-hashes -r requirements-dev.lock.txt
 ```
 
 ### 3. Create a Feature Branch
