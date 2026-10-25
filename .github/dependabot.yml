@@ -1,7 +1,23 @@
+# Fleet dependency policy (2026-10-25): every install is hash-locked --
+# pip installs run --require-hashes against the committed locks, and
+# Gradle builds verify against gradle/verification-metadata.xml.
+# Dependabot VERSION updates for pip and gradle are OFF below
+# (open-pull-requests-limit: 0) on purpose. Dependabot does not
+# regenerate these locks: for pip it fetches the bumped package's own
+# hashes but never re-resolves the full set (and some lock/manifest
+# files it never touches at all), and for gradle it does not run
+# Gradle and never updates verification-metadata.xml. Its bump PRs
+# therefore cannot be merged as-is; pip/gradle bumps land via crew
+# relock passes under the hash-lock policy (relock / metadata
+# regeneration, then a clean locked-install or locked-build proof).
+# Dependabot ALERTS and SECURITY updates stay enabled at repo level,
+# and any Dependabot security PR gets its relock commit before merge.
+# github-actions version updates stay ON (no lock conflict).
 version: 2
 updates:
   - package-ecosystem: "pip"
     directory: "/"
+    open-pull-requests-limit: 0
     schedule:
       interval: "weekly"
   - package-ecosystem: "github-actions"
