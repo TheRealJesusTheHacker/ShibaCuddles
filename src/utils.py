@@ -179,7 +179,7 @@ def print_banner():
     banner = r"""
     ╔═══════════════════════════════════════════════════════════════╗
     ║                   🐕 ShibaCuddles 🐕                          ║
-    ║              Advanced Network Scanner v0.3.6                  ║
+    ║              Advanced Network Scanner v0.3.7                  ║
     ║          High-Performance Parallel Scanning                   ║
     ╚═══════════════════════════════════════════════════════════════╝
     """
@@ -189,7 +189,7 @@ def print_banner():
         # Legacy Windows consoles (cp437/cp1252 codepages) cannot render
         # the box-drawing glyphs or the emoji: fall back to plain ASCII
         # so startup never crashes on a codepage-limited console.
-        print("ShibaCuddles - Advanced Network Scanner v0.3.6")
+        print("ShibaCuddles - Advanced Network Scanner v0.3.7")
 
 
 def format_bytes(bytes_value: int) -> str:

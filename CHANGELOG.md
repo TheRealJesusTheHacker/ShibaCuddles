@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.7] - 2026-10-25
+
+### Fixed (Fleet Sweep #6 CodeQL, 2026-10-25)
+
+- The rogue-AP hostapd config — which carries a clear-text
+  `wpa_passphrase` by hostapd's own interface design — was written
+  by closing the `mkstemp` file and reopening it by name, leaving a
+  name-based race on a secrets-bearing file. The config is now
+  written through the `mkstemp` descriptor itself (mode 0600,
+  `O_EXCL` creation), so the file is never reopened by name. The
+  passphrase is still freshly generated per run, and the file is
+  still unlinked in a `finally` after the run with an `atexit`
+  backstop.
+- Regression test: `tests/test_codeql_sweep6.py` (asserts the
+  config file is mode 0600 during the hostapd run and absent
+  afterwards). Suite: 186 passed. Dependency installs are
+  hash-locked (`pip install --require-hashes` against the
+  committed locks).
+
 ## [0.3.6] - 2026-10-25
 
 ### Fixed (release-train functional pass, 2026-10-25)
