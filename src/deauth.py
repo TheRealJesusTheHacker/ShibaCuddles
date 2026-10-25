@@ -591,9 +591,16 @@ class WiFiDeauthenticator:
             fd, hostapd_conf = tempfile.mkstemp(
                 prefix="shibacuddles_hostapd_", suffix=".conf"
             )
-            os.close(fd)
             try:
-                with open(hostapd_conf, "w") as f:
+                # Write through the mkstemp descriptor itself (mode
+                # 0600, created O_EXCL) instead of closing and
+                # reopening by name: the passphrase-bearing file is
+                # never exposed through a name-based reopen race.
+                # hostapd requires the passphrase in this config file
+                # in clear text — that is its documented interface —
+                # so the file stays private (0600), transient, and
+                # unlinked below (Sweep #6, CodeQL #6 disposition).
+                with os.fdopen(fd, "w") as f:
                     f.write(config)
 
                 # atexit backstop: if the interpreter exits while hostapd
