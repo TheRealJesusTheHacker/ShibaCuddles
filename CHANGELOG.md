@@ -7,6 +7,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.6] - 2026-10-25
+
+### Fixed (release-train functional pass, 2026-10-25)
+
+- `--no-ping` scans reported "Alive: 0 | Dead: 0" in the final
+  statistics even when hosts were scanned and found alive:
+  `NetworkScanner.scan` only set the alive/dead counters on the
+  ping-sweep path. The no-ping path now counts every target as alive
+  (which is how it treats them for scanning), keeping
+  total = alive + dead on both paths.
+- GUI export overwrite prompt was unreachable in both of its cases.
+  The check ran on the path as typed, BEFORE the format extension was
+  appended, so exporting to a bare name ("report") silently overwrote
+  an existing "report.json"; and when the prompt was reached, it used
+  the Qt5-era `QMessageBox.Yes`/`QMessageBox.No`, which do not exist
+  in PyQt6, so the export raised `AttributeError` and died. The
+  extension is now appended first and the prompt uses
+  `QMessageBox.StandardButton` (as the scan guardrail already did).
+- Service lines in printed results and TXT exports lost their
+  indentation (a `.strip()` meant to drop a trailing space also ate
+  the leading spaces); both now use `.rstrip()`.
+- Regression tests: `tests/test_release_train_2026_10_25.py` (6 tests).
+  Suite: 185 passed. Dependency installs are hash-locked
+  (`pip install --require-hashes` against the committed locks).
+
 ## [0.3.5] - 2026-10-24
 
 ### Fixed (fleet sweep #5, 2026-10-24)

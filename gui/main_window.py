@@ -966,21 +966,30 @@ class ShibaCuddlesGUI(QMainWindow):
                 "json",
             )
 
+            # Windows relies on file extensions for associations: append the
+            # chosen format's extension when the user typed a bare name.
+            # This must happen BEFORE the overwrite check below: checking
+            # the bare name first meant "report" sailed past the prompt
+            # and then silently overwrote an existing "report.json" (the
+            # save itself runs with force=True, so nothing else asked).
+            if not Path(file_path).suffix:
+                file_path = f"{file_path}.{export_format}"
+
             if Path(file_path).exists():
+                # PyQt6 moved these to StandardButton (as the scan
+                # guardrail above already uses): QMessageBox.Yes/No do
+                # not exist in PyQt6, so this prompt raised
+                # AttributeError and the export died whenever the target
+                # file already existed.
                 reply = QMessageBox.question(
                     self,
                     "Overwrite?",
                     f"{file_path} already exists.\nOverwrite it?",
-                    QMessageBox.Yes | QMessageBox.No,
-                    QMessageBox.No,
+                    QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                    QMessageBox.StandardButton.No,
                 )
-                if reply != QMessageBox.Yes:
+                if reply != QMessageBox.StandardButton.Yes:
                     return
-
-            # Windows relies on file extensions for associations: append the
-            # chosen format's extension when the user typed a bare name.
-            if not Path(file_path).suffix:
-                file_path = f"{file_path}.{export_format}"
 
             handler = ResultsHandler()
             if handler.save(self.scan_results, file_path, export_format, force=True):

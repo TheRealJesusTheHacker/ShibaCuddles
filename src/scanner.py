@@ -216,6 +216,13 @@ class NetworkScanner:
                 self.logger.info(f"Discovered {len(alive_ips)} alive hosts")
             else:
                 alive_ips = target_ips
+                # No discovery ran, so every target is treated as alive
+                # for scanning; the statistics must say so. Leaving the
+                # counters at 0 reported "Alive: 0 | Dead: 0" for a
+                # --no-ping scan that found alive hosts, and broke the
+                # total = alive + dead invariant the ping path keeps.
+                self.stats["alive_hosts"] = len(alive_ips)
+                self.stats["dead_hosts"] = 0
                 self.logger.info("Skipping device discovery, scanning all hosts")
 
             # Step 3: Port scanning
@@ -531,7 +538,7 @@ class NetworkScanner:
                     for port, service_info in result.services.items():
                         service_name = service_info.get("name", "Unknown")
                         version = service_info.get("version", "")
-                        print(f"    {port}: {service_name} {version}".strip())
+                        print(f"    {port}: {service_name} {version}".rstrip())
             else:
                 print("  Open Ports: None found")
 

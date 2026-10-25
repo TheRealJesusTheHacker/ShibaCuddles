@@ -225,7 +225,7 @@ class ResultsHandler:
                     for port, service_info in services.items():
                         service_name = service_info.get("name", "Unknown")
                         version = service_info.get("version", "")
-                        f.write(f"  {port}: {service_name} {version}".strip() + "\n")
+                        f.write(f"  {port}: {service_name} {version}".rstrip() + "\n")
 
                 vulnerabilities = result_dict.get("vulnerabilities") or {}
                 if vulnerabilities:
