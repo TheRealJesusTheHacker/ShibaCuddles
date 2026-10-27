@@ -41,7 +41,6 @@ jobs:
           files: |
             dist/*.exe
             dist/SHA256SUMS-windows.txt
-          generate_release_notes: true
 
   build-linux:
     name: Build Linux binary
