@@ -17,7 +17,7 @@ from .utils import (
 )
 
 __version__ = "0.3.7"
-__author__ = "thedarkonejesus"
+__author__ = "TheRealJesusTheHacker"
 __description__ = "ShibaCuddles - Advanced Network Scanner"
 
 __all__ = [
