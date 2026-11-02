@@ -19,7 +19,7 @@ We are committed to providing a welcoming and inspiring community for all. Pleas
 # Fork the repository on GitHub, then:
 git clone https://github.com/YOUR-USERNAME/ShibaCuddles.git
 cd ShibaCuddles
-git remote add upstream https://github.com/thedarkonejesus/ShibaCuddles.git
+git remote add upstream https://github.com/TheRealJesusTheHacker/ShibaCuddles.git
 ```
 
 ### 2. Set Up Development Environment
@@ -257,8 +257,8 @@ pdoc --html src/ -o docs/
 
 ## Questions?
 
-- Check [existing issues](https://github.com/thedarkonejesus/ShibaCuddles/issues)
-- Look at [pull requests](https://github.com/thedarkonejesus/ShibaCuddles/pulls) for similar changes
+- Check [existing issues](https://github.com/TheRealJesusTheHacker/ShibaCuddles/issues)
+- Look at [pull requests](https://github.com/TheRealJesusTheHacker/ShibaCuddles/pulls) for similar changes
 - Open a discussion for non-urgent questions
 
 ## Recognition
